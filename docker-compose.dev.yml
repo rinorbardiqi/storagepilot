@@ -1,0 +1,19 @@
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# Runs Vite dev server with hot reload instead of the nginx production image.
+
+services:
+  storagepilot:
+    build: !reset null
+    image: node:22-alpine
+    working_dir: /app
+    entrypoint: []
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    volumes:
+      - ./app:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_GCS_BASE: /api/gcs
+      VITE_S3_BASE: /api/s3
+      VITE_AZURE_BASE: /api/azure

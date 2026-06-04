@@ -1,0 +1,63 @@
+server {
+  listen 80;
+  resolver 127.0.0.11 valid=10s ipv6=off;
+
+  location / {
+    root /usr/share/nginx/html;
+    try_files $uri $uri/ /index.html;
+  }
+
+  location /api/gcs/ {
+    set $gcs_upstream ${GCS_URL};
+    rewrite ^/api/gcs/(.*)$ /$1 break;
+    proxy_pass $gcs_upstream;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_request_buffering off;
+    proxy_buffering off;
+    client_max_body_size 5G;
+    proxy_read_timeout 300s;
+    proxy_send_timeout 300s;
+  }
+
+  location /api/s3/ {
+    set $s3_upstream ${S3_URL};
+    rewrite ^/api/s3/(.*)$ /$1 break;
+    proxy_pass $s3_upstream;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_request_buffering off;
+    proxy_buffering off;
+    client_max_body_size 5G;
+    proxy_read_timeout 300s;
+    proxy_send_timeout 300s;
+  }
+
+  location /api/azure/ {
+    # Signed Azure requests use Authorization + x-ms-* headers → browser preflight.
+    # Azurite CORS is off by default; answer OPTIONS here and attach ACAO on responses.
+    if ($request_method = OPTIONS) {
+      add_header Access-Control-Allow-Origin $http_origin always;
+      add_header Access-Control-Allow-Methods "GET, PUT, POST, DELETE, HEAD, OPTIONS" always;
+      add_header Access-Control-Allow-Headers "Authorization, Content-Type, Content-Length, x-ms-date, x-ms-version, x-ms-blob-type, x-ms-copy-source, x-ms-meta-*" always;
+      add_header Access-Control-Max-Age 86400 always;
+      add_header Content-Length 0;
+      return 204;
+    }
+
+    add_header Access-Control-Allow-Origin $http_origin always;
+    add_header Access-Control-Expose-Headers "etag, x-ms-request-id, content-length, content-type, last-modified, x-ms-version" always;
+    add_header Vary Origin always;
+
+    set $azure_upstream ${AZURE_URL};
+    rewrite ^/api/azure/(.*)$ /$1 break;
+    proxy_pass $azure_upstream;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_request_buffering off;
+    proxy_buffering off;
+    client_max_body_size 5G;
+    proxy_read_timeout 300s;
+    proxy_send_timeout 300s;
+  }
+}

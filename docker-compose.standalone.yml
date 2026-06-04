@@ -1,0 +1,16 @@
+# UI only — point at emulators already running on the host.
+# Usage: docker compose -f docker-compose.standalone.yml up
+
+name: storagepilot-standalone
+
+services:
+  storagepilot:
+    image: ${STORAGEPILOT_IMAGE:-rinorbardiqi/storagepilot:latest}
+    pull_policy: always
+    ports:
+      - "${PORT:-3000}:80"
+    environment:
+      STORAGEPILOT_HOST: ${STORAGEPILOT_HOST:-host.docker.internal}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
