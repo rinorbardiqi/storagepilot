@@ -67,11 +67,9 @@ export class AzureProvider implements StorageProvider {
         if (name !== key) return null;
 
         const props = blob.getElementsByTagName('Properties')[0];
-        const versionId =
-          blob.getElementsByTagName('VersionId')[0]?.textContent?.trim() ||
-          props?.getElementsByTagName('Etag')[0]?.textContent?.replace(/"/g, '') ||
-          props?.getElementsByTagName('ETag')[0]?.textContent?.replace(/"/g, '') ||
-          '';
+        // Only use the real VersionId element — ETag is not a version identifier
+        // and using it breaks restore/delete-version calls.
+        const versionId = blob.getElementsByTagName('VersionId')[0]?.textContent?.trim() ?? '';
         if (!versionId) return null;
 
         const isLatest =
@@ -102,7 +100,13 @@ export class AzureProvider implements StorageProvider {
       const res = await azureFetch(url, this.accountName, this.accountKey, init);
       if (!res.ok) {
         const text = await res.text().catch(() => '');
-        throw mapHttpStatusToError(res.status, 'azure', text || res.statusText);
+        // Extract Azure error code from XML body when present.
+        const codeMatch = text.match(/<Code>([^<]+)<\/Code>/);
+        const msgMatch = text.match(/<Message>([^<]+)<\/Message>/);
+        const detail = codeMatch
+          ? `${codeMatch[1]}: ${msgMatch?.[1] ?? res.statusText}`
+          : text || res.statusText;
+        throw mapHttpStatusToError(res.status, 'azure', detail);
       }
       return res;
     } catch (err) {
@@ -207,6 +211,12 @@ export class AzureProvider implements StorageProvider {
   async getObjectMetadata(container: string, key: string): Promise<ObjectMetadata> {
     const url = this.objectUrl(container, key);
     const res = await this.request(url, { method: 'HEAD' });
+    const customMetadata: Record<string, string> = {};
+    for (const [header, value] of res.headers.entries()) {
+      if (header.startsWith('x-ms-meta-')) {
+        customMetadata[header.slice('x-ms-meta-'.length)] = value;
+      }
+    }
     return {
       key,
       bucket: container,
@@ -215,7 +225,7 @@ export class AzureProvider implements StorageProvider {
       lastModified: new Date(res.headers.get('last-modified') ?? Date.now()),
       etag: res.headers.get('etag')?.replace(/"/g, '') ?? '',
       versionId: res.headers.get('x-ms-version-id') ?? undefined,
-      customMetadata: {},
+      customMetadata,
       provider: 'azure',
     };
   }
@@ -227,11 +237,18 @@ export class AzureProvider implements StorageProvider {
     opts?: UploadOpts,
   ): Promise<void> {
     const url = this.objectUrl(container, key);
+    const metaHeaders: Record<string, string> = {};
+    if (opts?.customMetadata) {
+      for (const [k, v] of Object.entries(opts.customMetadata)) {
+        metaHeaders[`x-ms-meta-${k}`] = v;
+      }
+    }
     await this.request(url, {
       method: 'PUT',
       headers: {
         'Content-Type': opts?.contentType ?? (file.type || 'application/octet-stream'),
         'x-ms-blob-type': 'BlockBlob',
+        ...metaHeaders,
       },
       body: file,
     });

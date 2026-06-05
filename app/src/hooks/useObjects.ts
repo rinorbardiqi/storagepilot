@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { StorageError } from '../api/types';
 import type { ListResult } from '../api/types';
 import { OBJECTS_PAGE_SIZE } from '../lib/listPagination';
@@ -25,6 +25,9 @@ export function useObjects() {
   const [pageIndex, setPageIndex] = useState(0);
   const [pageTokens, setPageTokens] = useState<(string | undefined)[]>([undefined]);
 
+  // Tracks the current request so stale responses are discarded.
+  const requestIdRef = useRef(0);
+
   const pageToken = pageTokens[pageIndex];
   const page = pageIndex + 1;
   const hasNextPage = Boolean(data.nextPageToken);
@@ -40,8 +43,12 @@ export function useObjects() {
     const provider = getActiveProvider();
     if (!provider || !currentBucket || connectionStatus !== 'connected') {
       setData(EMPTY);
+      setLoading(false);
       return;
     }
+
+    const thisId = ++requestIdRef.current;
+
     setLoading(true);
     setError(null);
     setNotFound(false);
@@ -53,8 +60,11 @@ export function useObjects() {
         maxResults: OBJECTS_PAGE_SIZE,
         pageToken,
       });
+      // Discard if a newer request is already in flight.
+      if (thisId !== requestIdRef.current) return;
       setData(result);
     } catch (err) {
+      if (thisId !== requestIdRef.current) return;
       if (err instanceof StorageError) {
         if (err.code === 'NOT_FOUND') {
           setNotFound(true, err.message);
@@ -65,7 +75,7 @@ export function useObjects() {
       setError(err instanceof Error ? err.message : 'Failed to load objects');
       setData(EMPTY);
     } finally {
-      setLoading(false);
+      if (thisId === requestIdRef.current) setLoading(false);
     }
   }, [
     getActiveProvider,

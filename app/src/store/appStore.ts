@@ -41,11 +41,21 @@ export const useAppStore = create<AppState>()((set) => ({
   objectsRevision: 0,
 
   setCurrentBucket: (bucket) =>
-    set({ currentBucket: bucket, currentPrefix: '', browserSearchQuery: '' }),
-  setCurrentPrefix: (prefix) => set({ currentPrefix: prefix, browserSearchQuery: '' }),
+    set({
+      currentBucket: bucket,
+      currentPrefix: '',
+      browserSearchQuery: '',
+      filterContentType: null,
+    }),
+
+  setCurrentPrefix: (prefix) =>
+    set({ currentPrefix: prefix, browserSearchQuery: '' }),
 
   navigateInto: (segment) =>
-    set((s) => ({ currentPrefix: s.currentPrefix + segment, browserSearchQuery: '' })),
+    set((s) => ({
+      currentPrefix: s.currentPrefix + segment,
+      browserSearchQuery: '',
+    })),
 
   navigateUp: () =>
     set((s) => {
@@ -68,6 +78,7 @@ export const useAppStore = create<AppState>()((set) => ({
   setSearchQuery: (searchQuery) => set({ searchQuery }),
   setBrowserSearchQuery: (browserSearchQuery) => set({ browserSearchQuery }),
   setFilterContentType: (filterContentType) => set({ filterContentType }),
-  resetFilters: () => set({ searchQuery: '', filterContentType: null }),
+  resetFilters: () =>
+    set({ searchQuery: '', filterContentType: null, browserSearchQuery: '' }),
   invalidateObjects: () => set((s) => ({ objectsRevision: s.objectsRevision + 1 })),
 }));

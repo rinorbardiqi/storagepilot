@@ -23,6 +23,8 @@ export function useObjectBlob(
 ): ObjectBlobState {
   const enabled = options.enabled ?? true;
   const getActiveProvider = useConnectionStore((s) => s.getActiveProvider);
+  // Include activeProfileId so we refetch when the user switches connections.
+  const activeProfileId = useConnectionStore((s) => s.activeProfileId);
   const resolvedType = resolveContentType(key, contentType);
   const previewKind = getPreviewKind(key, contentType);
 
@@ -78,7 +80,7 @@ export function useObjectBlob(
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [bucket, key, contentType, enabled, getActiveProvider]);
+  }, [bucket, key, contentType, enabled, getActiveProvider, activeProfileId]);
 
   return { blob, url, contentType: resolvedType, previewKind, loading, error };
 }

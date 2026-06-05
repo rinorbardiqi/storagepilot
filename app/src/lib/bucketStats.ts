@@ -1,7 +1,9 @@
 import type { StorageProvider } from '../api/StorageProvider';
 import type { BucketStats } from '../api/types';
 
-/** Paginate listObjects and aggregate bucket statistics. */
+const TOP_N = 10;
+
+/** Paginate listObjects and aggregate bucket statistics without loading all keys into memory. */
 export async function computeBucketStats(
   provider: StorageProvider,
   bucket: string,
@@ -10,7 +12,21 @@ export async function computeBucketStats(
   let objectCount = 0;
   let totalSize = 0;
   const contentTypeBreakdown: Record<string, { count: number; size: number }> = {};
-  const largestObjects: Array<{ key: string; size: number }> = [];
+
+  // Fixed-size max-heap tracking the top-N largest objects.
+  // We store [size, key] pairs sorted ascending so the smallest of the top-N
+  // is at index 0 and can be evicted cheaply.
+  const topN: Array<{ key: string; size: number }> = [];
+
+  const insertTopN = (key: string, size: number) => {
+    if (topN.length < TOP_N) {
+      topN.push({ key, size });
+      topN.sort((a, b) => a.size - b.size);
+    } else if (topN[0] && size > topN[0].size) {
+      topN[0] = { key, size };
+      topN.sort((a, b) => a.size - b.size);
+    }
+  };
 
   do {
     const page = await provider.listObjects(bucket, { maxResults: 500, pageToken });
@@ -22,17 +38,15 @@ export async function computeBucketStats(
       if (!contentTypeBreakdown[ct]) contentTypeBreakdown[ct] = { count: 0, size: 0 };
       contentTypeBreakdown[ct].count += 1;
       contentTypeBreakdown[ct].size += obj.size;
-      largestObjects.push({ key: obj.key, size: obj.size });
+      insertTopN(obj.key, obj.size);
     }
     pageToken = page.nextPageToken;
   } while (pageToken);
-
-  largestObjects.sort((a, b) => b.size - a.size);
 
   return {
     objectCount,
     totalSize,
     contentTypeBreakdown,
-    largestObjects: largestObjects.slice(0, 10),
+    largestObjects: topN.sort((a, b) => b.size - a.size),
   };
 }

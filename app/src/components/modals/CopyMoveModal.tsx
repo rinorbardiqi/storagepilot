@@ -3,6 +3,7 @@ import { ArrowRightLeft, File, Folder, FolderOpen } from "lucide-react";
 import { useAppStore } from "../../store/appStore";
 import { useConnectionStore } from "../../store/connectionStore";
 import { useModalStore } from "../../store/modalStore";
+import { useSelectionStore } from "../../store/selectionStore";
 import { useToast } from "../../hooks/useToast";
 import { formatBytes } from "../../lib/formatBytes";
 import {
@@ -23,7 +24,9 @@ export function CopyMoveModal() {
   const activeProfileId = useConnectionStore((s) => s.activeProfileId);
   const profiles = useConnectionStore((s) => s.profiles);
   const currentBucket = useAppStore((s) => s.currentBucket);
+  const currentPrefix = useAppStore((s) => s.currentPrefix);
   const invalidateObjects = useAppStore((s) => s.invalidateObjects);
+  const clearSelection = useSelectionStore((s) => s.clearSelection);
   const toast = useToast();
   const [destProfileId, setDestProfileId] = useState(activeProfileId ?? "");
   const [destBuckets, setDestBuckets] = useState<Bucket[]>([]);
@@ -44,8 +47,9 @@ export function CopyMoveModal() {
       setOperation(payload.operation);
       setDestBucket(currentBucket ?? "");
       setDestProfileId(activeProfileId ?? profiles[0]?.id ?? "");
+      setDestPrefix(currentPrefix);
     }
-  }, [payload, currentBucket, activeProfileId, profiles]);
+  }, [payload, currentBucket, currentPrefix, activeProfileId, profiles]);
 
   useEffect(() => {
     if (!destProfileId) {
@@ -88,43 +92,51 @@ export function CopyMoveModal() {
     setBusy(true);
     setProgress("");
     try {
+      const planned = payload.keys.map((key) => ({
+        key,
+        dstKey: buildDestinationKey(key, destPrefix, preservePath),
+      }));
+      const samePlace = planned.filter(
+        (p) => currentBucket === destBucket && p.key === p.dstKey,
+      );
+      if (samePlace.length) {
+        toast.error("Destination matches source — choose a different bucket or path");
+        return;
+      }
+
       const sameBackend = !crossTarget && source.type === destination.type;
 
       if (sameBackend && operation === "copy") {
-        for (const key of payload.keys) {
-          const dstKey = buildDestinationKey(key, destPrefix, preservePath);
+        for (const { key, dstKey } of planned) {
           await source.copyObject(
             { bucket: currentBucket, key },
             { bucket: destBucket, key: dstKey },
           );
         }
       } else if (sameBackend && operation === "move") {
-        for (const key of payload.keys) {
-          const dstKey = buildDestinationKey(key, destPrefix, preservePath);
+        for (const { key, dstKey } of planned) {
           await source.moveObject(
             { bucket: currentBucket, key },
             { bucket: destBucket, key: dstKey },
           );
         }
       } else {
-        const items = payload.keys.map((key) => {
-          const dstKey = buildDestinationKey(key, destPrefix, preservePath);
-          return {
-            src: { bucket: currentBucket, key },
-            dst: { bucket: destBucket, key: dstKey },
-          };
-        });
+        const items = planned.map(({ key, dstKey }) => ({
+          src: { bucket: currentBucket, key },
+          dst: { bucket: destBucket, key: dstKey },
+        }));
         await transferObjects(source, destination, items, (p) => {
           setProgress(`${p.completed + 1}/${p.total}`);
         });
-        if (operation === "move" && crossTarget) {
-          for (const key of payload.keys) {
+        if (operation === "move") {
+          for (const { key } of planned) {
             await source.deleteObject(currentBucket, key);
           }
         }
       }
 
       invalidateObjects();
+      clearSelection();
       toast.success(
         `${operation === "copy" ? "Copied" : "Moved"} ${payload.keys.length} object(s)${
           crossTarget ? ` to ${destProfile?.name ?? "destination"}` : ""

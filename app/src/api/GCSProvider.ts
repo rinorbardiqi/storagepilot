@@ -15,7 +15,7 @@ import type {
   PathFormats,
   UploadOpts,
 } from './types';
-import { fetchWithError, notImplemented } from './types';
+import { fetchWithError, notImplemented, StorageError } from './types';
 
 export interface GCSConfig {
   type: 'gcs';
@@ -194,18 +194,36 @@ export class GCSProvider implements StorageProvider {
     file: File,
     opts?: UploadOpts,
   ): Promise<void> {
-    const params = new URLSearchParams({
-      uploadType: 'media',
-      name: key,
-    });
-    const url = `${this.baseUrl}/upload/storage/v1/b/${encodeURIComponent(bucket)}/o?${params}`;
-    await fetchWithError(url, this.type, {
-      method: 'POST',
-      headers: {
-        'Content-Type': opts?.contentType ?? (file.type || 'application/octet-stream'),
-      },
-      body: file,
-    });
+    const hasMetadata = opts?.customMetadata && Object.keys(opts.customMetadata).length > 0;
+
+    if (hasMetadata) {
+      // Multipart upload to attach metadata alongside the object content.
+      const metadata = JSON.stringify({
+        name: key,
+        contentType: opts?.contentType ?? (file.type || 'application/octet-stream'),
+        metadata: opts!.customMetadata,
+      });
+      const boundary = `sp_boundary_${crypto.randomUUID().replace(/-/g, '')}`;
+      const metaPart = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n`;
+      const dataPart = `--${boundary}\r\nContent-Type: ${opts?.contentType ?? (file.type || 'application/octet-stream')}\r\n\r\n`;
+      const close = `\r\n--${boundary}--`;
+      const body = new Blob([metaPart, dataPart, file, close]);
+      const params = new URLSearchParams({ uploadType: 'multipart', name: key });
+      const url = `${this.baseUrl}/upload/storage/v1/b/${encodeURIComponent(bucket)}/o?${params}`;
+      await fetchWithError(url, this.type, {
+        method: 'POST',
+        headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
+        body,
+      });
+    } else {
+      const params = new URLSearchParams({ uploadType: 'media', name: key });
+      const url = `${this.baseUrl}/upload/storage/v1/b/${encodeURIComponent(bucket)}/o?${params}`;
+      await fetchWithError(url, this.type, {
+        method: 'POST',
+        headers: { 'Content-Type': opts?.contentType ?? (file.type || 'application/octet-stream') },
+        body: file,
+      });
+    }
     opts?.onProgress?.(100, file.size);
   }
 
@@ -246,8 +264,10 @@ export class GCSProvider implements StorageProvider {
       try {
         const current = await this.fetchObjectResource(bucket, key);
         return [this.toObjectVersion(current, true)];
-      } catch {
-        return [];
+      } catch (err) {
+        // Return empty only for confirmed "not found"; rethrow auth/network errors.
+        if (err instanceof StorageError && (err as StorageError).code === 'NOT_FOUND') return [];
+        throw err;
       }
     }
 

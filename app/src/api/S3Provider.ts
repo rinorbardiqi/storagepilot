@@ -17,6 +17,7 @@ import { computeBucketStats } from '../lib/bucketStats';
 import { prepareBucketName } from '../lib/bucketName';
 import { buildPathFormats } from '../lib/pathFormatters';
 import { assertUploadBlob, toUploadBytes } from '../lib/uploadBody';
+import { s3CopySource } from '../lib/s3CopySource';
 import { resolveApiUrl } from '../lib/resolveApiUrl';
 import { normalizeS3Endpoint } from '../lib/emulatorEndpoints';
 import type { StorageProvider } from './StorageProvider';
@@ -155,8 +156,14 @@ export class S3Provider implements StorageProvider {
         headers: r.AllowedHeaders ?? [],
         maxAgeSeconds: r.MaxAgeSeconds ?? 3600,
       }));
-    } catch {
-      return [];
+    } catch (err) {
+      // S3/MinIO returns NoSuchCORSConfiguration (404) when no rules are set —
+      // that's a valid empty state.  Any other error should propagate.
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('NoSuchCORSConfiguration') || msg.includes('The CORS configuration does not exist')) {
+        return [];
+      }
+      this.wrapError(err, 'getCorsRules');
     }
   }
 
@@ -264,7 +271,7 @@ export class S3Provider implements StorageProvider {
         new CopyObjectCommand({
           Bucket: dst.bucket,
           Key: dst.key,
-          CopySource: `${src.bucket}/${encodeURIComponent(src.key)}`,
+          CopySource: s3CopySource(src.bucket, src.key),
         }),
       );
     } catch (err) {
@@ -312,7 +319,7 @@ export class S3Provider implements StorageProvider {
         new CopyObjectCommand({
           Bucket: bucket,
           Key: key,
-          CopySource: `${bucket}/${encodeURIComponent(key)}?versionId=${encodeURIComponent(versionId)}`,
+          CopySource: s3CopySource(bucket, key, versionId),
         }),
       );
     } catch (err) {
@@ -331,7 +338,8 @@ export class S3Provider implements StorageProvider {
   }
 
   getObjectUrl(bucket: string, key: string): string {
-    return `${this.baseUrl}/${bucket}/${key}`;
+    const encodedKey = key.split('/').map(encodeURIComponent).join('/');
+    return `${this.baseUrl}/${bucket}/${encodedKey}`;
   }
 
   getPathFormats(bucket: string, key: string): PathFormats {

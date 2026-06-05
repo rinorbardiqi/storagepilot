@@ -37,6 +37,12 @@ export function ExportImportModal() {
   useEffect(() => {
     if (isOpen) {
       setTab(payload?.tab ?? 'export');
+    } else {
+      // Clear import state when modal closes so reopening starts fresh.
+      setImportFiles([]);
+      setImportManifest(null);
+      setSelected(new Set());
+      setProgress('');
     }
   }, [isOpen, payload?.tab]);
 
@@ -108,22 +114,31 @@ export function ExportImportModal() {
   };
 
   const onImportZip = async (file: File) => {
-    const JSZip = (await import('jszip')).default;
-    const zip = await JSZip.loadAsync(file);
-    const entries: Array<{ path: string; blob: Blob }> = [];
-    let manifestRaw: string | null = null;
+    try {
+      const JSZip = (await import('jszip')).default;
+      const zip = await JSZip.loadAsync(file);
+      const entries: Array<{ path: string; blob: Blob }> = [];
+      let manifestRaw: string | null = null;
 
-    for (const [path, entry] of Object.entries(zip.files)) {
-      if (entry.dir) continue;
-      if (path === SNAPSHOT_MANIFEST_FILE) {
-        manifestRaw = await entry.async('string');
-        continue;
+      for (const [path, entry] of Object.entries(zip.files)) {
+        if (entry.dir) continue;
+        // Reject paths that could escape the zip root (zip-slip prevention).
+        const normalised = path.replace(/\\/g, '/').replace(/^\/+/, '');
+        if (normalised.includes('../') || normalised.startsWith('/')) continue;
+        if (path === SNAPSHOT_MANIFEST_FILE) {
+          manifestRaw = await entry.async('string');
+          continue;
+        }
+        const blob = await entry.async('blob');
+        entries.push({ path: normalised, blob });
       }
-      const blob = await entry.async('blob');
-      entries.push({ path, blob });
+      setImportFiles(entries);
+      setImportManifest(manifestRaw ? parseSnapshotManifest(manifestRaw) : null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to read ZIP file');
+      setImportFiles([]);
+      setImportManifest(null);
     }
-    setImportFiles(entries);
-    setImportManifest(manifestRaw ? parseSnapshotManifest(manifestRaw) : null);
   };
 
   const confirmImport = async () => {

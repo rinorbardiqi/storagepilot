@@ -43,10 +43,13 @@ export const useActivityStore = create<ActivityState>()(
     {
       name: 'storagepilot-activity',
       partialize: (s) => ({
-        entries: s.entries.map((e) => ({
-          ...e,
-          timestamp: e.timestamp instanceof Date ? e.timestamp.toISOString() : e.timestamp,
-        })),
+        // Never persist pending entries — they can never transition after reload.
+        entries: s.entries
+          .filter((e) => e.status !== 'pending')
+          .map((e) => ({
+            ...e,
+            timestamp: e.timestamp instanceof Date ? e.timestamp.toISOString() : e.timestamp,
+          })),
       }),
       merge: (persisted, current) => {
         const p = persisted as { entries?: Array<Omit<ActivityEntry, 'timestamp'> & { timestamp: string }> } | undefined;
