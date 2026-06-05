@@ -1,23 +1,29 @@
 import { useEffect, useState } from 'react';
-import { Copy, Download, Trash2 } from 'lucide-react';
+import { Code2, Copy, Download, Trash2 } from 'lucide-react';
 import type { ObjectMetadata, StorageObject } from '../../api/types';
 import { formatBytes } from '../../lib/formatBytes';
 import { formatDate } from '../../lib/formatDate';
-import { isImage } from '../../lib/contentTypeIcons';
+import { getPreviewKind } from '../../lib/contentTypeIcons';
 import { useConnectionStore } from '../../store/connectionStore';
 import { useModalStore } from '../../store/modalStore';
 import { useObjectActions } from '../../hooks/useObjectActions';
+import { useObjectBlob } from '../../hooks/useObjectBlob';
 import { Button } from '../shared/Button';
 import { FileIcon } from '../shared/FileIcon';
+import { ObjectPreview } from './preview/ObjectPreview';
 
 export function MetadataTab({ object, bucket }: { object: StorageObject; bucket: string }) {
   const getActiveProvider = useConnectionStore((s) => s.getActiveProvider);
   const openModal = useModalStore((s) => s.openModal);
   const { downloadOne, deleteOne } = useObjectActions();
   const provider = getActiveProvider();
+  const previewKind = getPreviewKind(object.key, object.contentType);
+  const compactPreviewEnabled = object.size <= 10 * 1024 * 1024;
+  const { blob, url, contentType, loading, error } = useObjectBlob(bucket, object.key, object.contentType, {
+    enabled: compactPreviewEnabled,
+  });
 
   const [metadata, setMetadata] = useState<ObjectMetadata | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [imageSize, setImageSize] = useState<string | null>(null);
 
   const publicUrl = provider?.getObjectUrl(bucket, object.key) ?? '';
@@ -41,28 +47,11 @@ export function MetadataTab({ object, bucket }: { object: StorageObject; bucket:
   }, [bucket, object.key, getActiveProvider]);
 
   useEffect(() => {
-    const p = getActiveProvider();
-    if (!p || !isImage(object.contentType)) return;
-    let objectUrl: string | null = null;
-    let cancelled = false;
-    void p
-      .getObject(bucket, object.key)
-      .then((blob) => {
-        if (cancelled) return;
-        objectUrl = URL.createObjectURL(blob);
-        setPreviewUrl(objectUrl);
-        const img = new Image();
-        img.onload = () => {
-          if (!cancelled) setImageSize(`${img.naturalWidth} × ${img.naturalHeight} px`);
-        };
-        img.src = objectUrl;
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [bucket, object.key, object.contentType, getActiveProvider]);
+    if (previewKind !== 'image' || !url) return;
+    const img = new Image();
+    img.onload = () => setImageSize(`${img.naturalWidth} × ${img.naturalHeight} px`);
+    img.src = url;
+  }, [previewKind, url]);
 
   const rows: Array<[string, string]> = [
     ['Object ID', object.key],
@@ -80,14 +69,28 @@ export function MetadataTab({ object, bucket }: { object: StorageObject; bucket:
   return (
     <div className="flex flex-col gap-5">
       <div className="relative aspect-video bg-[var(--bg-base)] border border-[var(--border)] flex items-center justify-center overflow-hidden">
-        {previewUrl ? (
-          <img src={previewUrl} alt={object.key} className="max-w-full max-h-full object-contain" />
-        ) : (
+        {loading ? (
+          <p className="text-xs text-[var(--text-muted)]">Loading preview…</p>
+        ) : error || !blob ? (
           <div className="text-center p-4">
             <div className="mx-auto mb-2 w-fit">
-              <FileIcon object={object} />
+              <FileIcon object={object} size={24} />
             </div>
             <p className="font-mono text-xs truncate">{object.key.split('/').pop()}</p>
+            {!compactPreviewEnabled && (
+              <p className="text-[10px] text-[var(--text-muted)] mt-2">Open Preview tab for large files</p>
+            )}
+          </div>
+        ) : (
+          <div className="w-full h-full p-2">
+            <ObjectPreview
+              object={object}
+              blob={blob}
+              url={url}
+              contentType={contentType}
+              previewKind={previewKind}
+              compact
+            />
           </div>
         )}
         {imageSize && (
@@ -169,6 +172,13 @@ export function MetadataTab({ object, bucket }: { object: StorageObject; bucket:
         <Button variant="outline" onClick={() => void downloadOne(object.key)}>
           <Download size={14} />
           Download
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => openModal('snippet', { bucket, key: object.key, operation: 'download' })}
+        >
+          <Code2 size={14} />
+          SDK snippet
         </Button>
         <Button variant="danger" onClick={() => deleteOne(object.key)}>
           <Trash2 size={14} />
