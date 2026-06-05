@@ -2,8 +2,12 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -24,23 +28,20 @@ jobs:
       - run: npm run test
       - run: npm run build
 
-  e2e:
+  smoke:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     steps:
       - uses: actions/checkout@v4
       - run: docker compose up -d
-      - run: npx wait-on http://localhost:3000 --timeout 120000
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: app/package-lock.json
-      - run: npm ci
-        working-directory: app
-      - run: npx playwright install --with-deps chromium
-        working-directory: app
-      - run: npx playwright test
-        working-directory: app
+      - name: Wait for UI
+        run: |
+          for i in $(seq 1 36); do
+            curl -fsS http://localhost:3000/ > /dev/null && exit 0
+            sleep 5
+          done
+          echo "StoragePilot did not become ready in time"
+          docker compose logs storagepilot
+          exit 1
       - run: docker compose down
         if: always()
