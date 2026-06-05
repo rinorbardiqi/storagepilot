@@ -1,11 +1,13 @@
 import { useEffect, useRef } from 'react';
-import { FolderOpen, MoreHorizontal, Plus, RefreshCw, Settings } from 'lucide-react';
+import { Database, MoreHorizontal, Plus, RefreshCw, Settings } from 'lucide-react';
 import { useBuckets } from '../../hooks/useBuckets';
 import { useModalStore } from '../../store/modalStore';
 import { usePreferencesStore } from '../../store/preferencesStore';
+import { useSelectionStore } from '../../store/selectionStore';
 import { useUiStore } from '../../store/uiStore';
 import { useAppStore } from '../../store/appStore';
 import { Button } from '../shared/Button';
+import { Checkbox } from '../shared/Checkbox';
 
 export function BucketListView() {
   const { buckets, loading, error, refresh } = useBuckets();
@@ -15,10 +17,20 @@ export function BucketListView() {
   const setCurrentBucket = useAppStore((s) => s.setCurrentBucket);
   const setNotFound = useUiStore((s) => s.setNotFound);
   const addRecentBucket = usePreferencesStore((s) => s.addRecentBucket);
+  const selectedKeys = useSelectionStore((s) => s.selectedKeys);
+  const toggle = useSelectionStore((s) => s.toggle);
+  const selectAll = useSelectionStore((s) => s.selectAll);
+  const clearSelection = useSelectionStore((s) => s.clearSelection);
   const initialSelectDone = useRef(false);
+
+  const bucketNames = buckets.map((b) => b.name);
+  const selectedCount = bucketNames.filter((name) => selectedKeys.has(name)).length;
+  const allSelected = bucketNames.length > 0 && selectedCount === bucketNames.length;
+  const someSelected = selectedCount > 0 && !allSelected;
 
   const browseBucket = (name: string) => {
     setNotFound(false);
+    clearSelection();
     setCurrentBucket(name);
     addRecentBucket(name);
   };
@@ -38,7 +50,7 @@ export function BucketListView() {
       <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] bg-[var(--bg-surface)]">
         <div className="flex items-center gap-3">
           <div className="p-2 border border-[var(--border)] bg-[var(--bg-base)]">
-            <FolderOpen size={16} className="text-[var(--accent)]" />
+            <Database size={16} strokeWidth={1.75} className="text-[var(--accent-s3)]" />
           </div>
           <div>
             <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--text-primary)]">
@@ -86,7 +98,12 @@ export function BucketListView() {
                 style={{ fontFamily: 'var(--font-mono)' }}
               >
                 <th className="w-12 px-3 py-3 text-left">
-                  <input type="checkbox" aria-label="Select all" className="size-[13px] rounded-[2.5px]" />
+                  <Checkbox
+                    checked={allSelected}
+                    indeterminate={someSelected}
+                    onChange={() => (allSelected || someSelected ? clearSelection() : selectAll(bucketNames))}
+                    aria-label="Select all buckets"
+                  />
                 </th>
                 <th className="px-3 py-3 text-left font-medium">Bucket Name</th>
                 <th className="px-3 py-3 text-left font-medium">Created At</th>
@@ -95,25 +112,35 @@ export function BucketListView() {
             </thead>
             <tbody>
               {buckets.map((bucket) => {
-                const selected = selectedBucketInList === bucket.name;
+                const detailSelected = selectedBucketInList === bucket.name;
+                const checked = selectedKeys.has(bucket.name);
                 return (
                   <tr
                     key={bucket.name}
                     className={`border-b border-[var(--border)] cursor-pointer transition-colors ${
-                      selected ? 'bg-[var(--accent)]/10 ring-1 ring-inset ring-[var(--accent)]/30' : 'hover:bg-[var(--bg-surface)]'
+                      detailSelected ? 'bg-[var(--accent)]/10 ring-1 ring-inset ring-[var(--accent)]/30' : 'hover:bg-[var(--bg-surface)]'
                     }`}
                     onClick={() => browseBucket(bucket.name)}
                     title="Click to browse bucket"
                   >
                     <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
+                      <Checkbox
+                        checked={checked}
+                        onChange={() => toggle(bucket.name)}
                         aria-label={`Select ${bucket.name}`}
-                        className="size-[13px] rounded-[2.5px]"
                       />
                     </td>
                     <td className="px-3 py-3 font-mono text-xs">
-                      <span className="text-[var(--accent)]">{bucket.name}</span>
+                      <div className="flex items-center gap-2.5">
+                        <Database
+                          size={14}
+                          strokeWidth={1.75}
+                          className={`shrink-0 ${detailSelected ? 'text-[var(--accent-s3)]' : 'text-[var(--text-muted)]'}`}
+                        />
+                        <span className={detailSelected ? 'text-[var(--text-primary)] font-medium' : 'text-[var(--accent-s3)]'}>
+                          {bucket.name}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-3 py-3 font-mono text-xs text-[var(--text-muted)]">
                       {bucket.createdAt?.toLocaleString() ?? '—'}

@@ -7,6 +7,7 @@ import { useAppStore } from '../../store/appStore';
 import { useModalStore } from '../../store/modalStore';
 import { useSelectionStore } from '../../store/selectionStore';
 import { SortHeader } from './BrowserChrome';
+import { Checkbox } from '../shared/Checkbox';
 import { FileIcon } from '../shared/FileIcon';
 
 interface ObjectTableProps {
@@ -62,7 +63,9 @@ export function ObjectTable({
   );
 
   const fileKeys = filtered.map((o) => o.key);
-  const allSelected = fileKeys.length > 0 && fileKeys.every((k) => selectedKeys.has(k));
+  const selectedCount = fileKeys.filter((k) => selectedKeys.has(k)).length;
+  const allSelected = fileKeys.length > 0 && selectedCount === fileKeys.length;
+  const someSelected = selectedCount > 0 && !allSelected;
 
   const rows: TableRow[] = [
     ...filteredPrefixes.map((p) => ({
@@ -88,12 +91,11 @@ export function ObjectTable({
       <thead className="sticky top-0 z-[1] bg-[rgba(22,27,34,0.95)] backdrop-blur-[2px] border-b border-[var(--border)]">
         <tr className="text-left text-[10px] uppercase text-[var(--text-muted)]" style={{ fontFamily: 'var(--font-mono)' }}>
           <th className="p-3 font-medium w-10 text-center">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={allSelected}
-              onChange={() => (allSelected ? clearSelection() : selectAll(fileKeys))}
+              indeterminate={someSelected}
+              onChange={() => (allSelected || someSelected ? clearSelection() : selectAll(fileKeys))}
               aria-label="Select all objects"
-              className="size-[13px] rounded-[2.5px]"
             />
           </th>
           <th className="p-3 font-medium">
@@ -115,13 +117,17 @@ export function ObjectTable({
         {rows.map((obj) => {
           const isFolder = obj.isFolder || obj.key.endsWith('/');
           const selected = !isFolder && selectedKeys.has(obj.key);
-          const label = objectDisplayName(obj.key);
+          const label = isFolder
+            ? obj.key.endsWith('/')
+              ? obj.key.split('/').filter(Boolean).pop() + '/'
+              : `${objectDisplayName(obj.key)}/`
+            : objectDisplayName(obj.key);
           return (
             <tr
               key={obj.key}
               role="row"
               className={`border-b border-[var(--border)] hover:bg-[var(--accent)]/5 cursor-pointer ${
-                selected ? 'bg-[var(--accent)]/10' : ''
+                selected ? 'bg-[var(--accent)]/5' : ''
               }`}
               onClick={() => {
                 if (isFolder) onNavigatePrefix(obj.key);
@@ -129,20 +135,20 @@ export function ObjectTable({
               }}
             >
               <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
-                {!isFolder && (
-                  <input
-                    type="checkbox"
-                    checked={selected}
-                    onChange={() => toggle(obj.key)}
-                    aria-label={`Select ${label}`}
-                    className="size-[13px] rounded-[2.5px]"
-                  />
-                )}
+                <Checkbox
+                  checked={selected}
+                  onChange={() => toggle(obj.key)}
+                  aria-label={isFolder ? `Folder ${label}` : `Select ${label}`}
+                  disabled={isFolder}
+                />
               </td>
               <td className="p-3">
-                <div className="flex items-center gap-2 min-w-0">
-                  <FileIcon object={obj} />
-                  <span className="font-mono truncate max-w-md" title={obj.key}>
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <FileIcon object={obj} size={18} />
+                  <span
+                    className={`font-mono truncate max-w-md ${isFolder ? 'text-[var(--text-primary)] font-medium' : ''}`}
+                    title={obj.key}
+                  >
                     {label}
                   </span>
                 </div>
@@ -171,7 +177,13 @@ export function ObjectTable({
                       type="button"
                       className="p-1 text-[var(--text-muted)] hover:text-[var(--accent)]"
                       title="Copy"
-                      onClick={() => openModal('copyMove', { operation: 'copy', keys: [obj.key] })}
+                      onClick={() =>
+                        openModal('copyMove', {
+                          operation: 'copy',
+                          keys: [obj.key],
+                          sizes: [obj.size],
+                        })
+                      }
                     >
                       <Copy size={14} />
                     </button>

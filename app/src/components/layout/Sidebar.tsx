@@ -2,6 +2,7 @@ import {
   BarChart3,
   CheckCircle2,
   Circle,
+  Database,
   FolderOpen,
   LogOut,
   RefreshCw,
@@ -237,10 +238,10 @@ export function Sidebar() {
                 <button
                   key={bucket.name}
                   type="button"
-                  className={`flex items-center justify-between w-full mb-0.5 text-left transition-colors ${
+                  className={`flex items-center justify-between w-full mb-0.5 text-left transition-colors border-l-2 ${
                     selected
-                      ? 'bg-[var(--accent)]/5 border-l-2 border-[var(--accent)] text-[var(--text-primary)] pl-[14px] pr-3 py-2'
-                      : 'hover:bg-[var(--bg-elevated)] text-[var(--text-muted)] border-l-2 border-transparent px-3 py-2'
+                      ? 'bg-[var(--accent-s3)]/10 border-[var(--accent-s3)] pl-[14px] pr-3 py-2'
+                      : 'border-transparent hover:bg-[var(--bg-elevated)] px-3 py-2'
                   }`}
                   onClick={() => {
                     setNotFound(false);
@@ -248,10 +249,18 @@ export function Sidebar() {
                     addRecentBucket(bucket.name);
                   }}
                 >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <FolderOpen size={12} className="shrink-0" />
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <Database
+                      size={14}
+                      strokeWidth={1.75}
+                      className={`shrink-0 ${selected ? 'text-[var(--accent-s3)]' : 'text-[var(--text-muted)]'}`}
+                    />
                     <span
-                      className={`text-xs truncate ${selected ? 'font-medium' : 'font-normal'} text-[var(--text-primary)]`}
+                      className={`text-xs truncate ${
+                        selected
+                          ? 'font-semibold text-[var(--text-primary)]'
+                          : 'font-normal text-[var(--text-muted)]'
+                      }`}
                       style={{ fontFamily: 'var(--font-ui)' }}
                     >
                       {bucket.name}
@@ -267,13 +276,13 @@ export function Sidebar() {
                   <button
                     key={name}
                     type="button"
-                    className="flex items-center gap-2 w-full px-3 py-2 text-left text-xs text-[var(--text-muted)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]"
+                    className="flex items-center gap-2.5 w-full px-3 py-2 text-left text-xs text-[var(--text-muted)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]"
                     onClick={() => {
                       setNotFound(false);
                       setCurrentBucket(name);
                     }}
                   >
-                    <FolderOpen size={12} />
+                    <Database size={14} strokeWidth={1.75} className="shrink-0" />
                     {name}
                   </button>
                 ))}
