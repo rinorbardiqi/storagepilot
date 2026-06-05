@@ -19,7 +19,6 @@ export function buildDefaultProfiles(): ConnectionProfile[] {
       name: 'GCS Emulator',
       type: 'gcs',
       gcsUrl: getDefaultGcsBase(),
-      gcsScheme: 'http',
     },
     {
       id: 'default-s3',

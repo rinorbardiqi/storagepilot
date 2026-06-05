@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { formatBytes } from '../../lib/formatBytes';
 import { getPreviewKind } from '../../lib/contentTypeIcons';
-import { matchesBrowserSearch, sortObjects, sortPrefixes } from '../../lib/sortObjects';
-import type { StorageObject } from '../../api/types';
+import { objectDisplayName } from '../../lib/objectKey';
 import { useAppStore } from '../../store/appStore';
 import { useConnectionStore } from '../../store/connectionStore';
 import { useUiStore } from '../../store/uiStore';
+import { useBrowserRows } from '../../hooks/useBrowserRows';
 import { FileIcon } from '../shared/FileIcon';
+import type { StorageObject } from '../../api/types';
 
 interface ObjectGridProps {
   objects: StorageObject[];
@@ -14,12 +15,9 @@ interface ObjectGridProps {
   onNavigatePrefix: (prefix: string) => void;
 }
 
-function objectDisplayName(key: string): string {
-  return key.replace(/\/$/, '').split('/').pop() ?? key;
-}
-
 function GridThumbnail({ object, bucket }: { object: StorageObject; bucket: string }) {
   const getActiveProvider = useConnectionStore((s) => s.getActiveProvider);
+  const activeProfileId = useConnectionStore((s) => s.activeProfileId);
   const previewKind = getPreviewKind(object.key, object.contentType);
   const [thumbUrl, setThumbUrl] = useState<string | null>(null);
 
@@ -31,17 +29,22 @@ function GridThumbnail({ object, bucket }: { object: StorageObject; bucket: stri
     let objectUrl: string | null = null;
     let cancelled = false;
 
-    void provider.getObject(bucket, object.key).then((blob) => {
-      if (cancelled) return;
-      objectUrl = URL.createObjectURL(blob);
-      setThumbUrl(objectUrl);
-    });
+    void provider
+      .getObject(bucket, object.key)
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setThumbUrl(objectUrl);
+      })
+      .catch(() => {
+        // Thumbnail fetch failed — fall back to icon silently.
+      });
 
     return () => {
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [bucket, object.key, object.contentType, previewKind, getActiveProvider]);
+  }, [bucket, object.key, object.contentType, previewKind, getActiveProvider, activeProfileId]);
 
   if (thumbUrl) {
     return (
@@ -57,45 +60,13 @@ function GridThumbnail({ object, bucket }: { object: StorageObject; bucket: stri
 export function ObjectGrid({ objects, prefixes, onNavigatePrefix }: ObjectGridProps) {
   const openDetail = useUiStore((s) => s.openDetail);
   const currentBucket = useAppStore((s) => s.currentBucket);
-  const browserSearchQuery = useAppStore((s) => s.browserSearchQuery);
-  const sortField = useAppStore((s) => s.sortField);
-  const sortDir = useAppStore((s) => s.sortDir);
 
-  const q = browserSearchQuery.trim().toLowerCase();
+  const { rows, isEmpty, query } = useBrowserRows(objects, prefixes);
 
-  const filtered = sortObjects(
-    objects.filter(
-      (o) =>
-        matchesBrowserSearch(o.key, q) ||
-        matchesBrowserSearch(objectDisplayName(o.key), q) ||
-        matchesBrowserSearch(o.contentType, q),
-    ),
-    sortField,
-    sortDir,
-  );
-
-  const filteredPrefixes = sortPrefixes(
-    prefixes.filter(
-      (p) => matchesBrowserSearch(p, q) || matchesBrowserSearch(objectDisplayName(p), q),
-    ),
-    sortDir,
-  );
-
-  const rows = [
-    ...filteredPrefixes.map((p) => ({
-      key: p,
-      size: 0,
-      contentType: '',
-      lastModified: new Date(),
-      isFolder: true,
-    })),
-    ...filtered,
-  ];
-
-  if (!rows.length) {
+  if (isEmpty) {
     return (
       <div className="p-8 text-center text-sm text-[var(--text-muted)]">
-        {q ? `No objects matching "${browserSearchQuery}"` : 'No objects in this prefix'}
+        {query ? `No objects matching "${query}"` : 'No objects in this prefix'}
       </div>
     );
   }
@@ -103,7 +74,7 @@ export function ObjectGrid({ objects, prefixes, onNavigatePrefix }: ObjectGridPr
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 p-4">
       {rows.map((obj) => {
-        const isFolder = obj.isFolder || obj.key.endsWith('/');
+        const { isFolder } = obj;
         return (
           <button
             key={obj.key}

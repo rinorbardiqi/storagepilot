@@ -1,13 +1,15 @@
-import { useActivityStore } from '../store/activityStore';
 import { sanitizeMethodArgs } from '../lib/uploadBody';
+import type { ActivityLogger } from './ActivityLogger';
 import type { StorageProvider } from './StorageProvider';
 
 /** Sync helpers — must not be wrapped or callers receive Promises instead of values. */
 const SYNC_METHODS = new Set(['getObjectUrl', 'getPathFormats']);
 
-export function instrument(provider: StorageProvider): StorageProvider {
-  const logger = useActivityStore.getState();
-
+/**
+ * Wraps a StorageProvider with an activity-logging proxy.
+ * The logger is injected so this module has no dependency on the UI store layer.
+ */
+export function instrument(provider: StorageProvider, logger: ActivityLogger): StorageProvider {
   return new Proxy(provider, {
     get(target, prop, receiver) {
       const orig = Reflect.get(target, prop, receiver);

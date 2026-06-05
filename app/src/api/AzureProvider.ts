@@ -2,6 +2,8 @@ import { computeBucketStats } from '../lib/bucketStats';
 import { prepareBucketName } from '../lib/bucketName';
 import { appendAzureQuery } from './azureQuery';
 import { buildPathFormats } from '../lib/pathFormatters';
+import { encodeObjectKey } from '../lib/objectKey';
+import { moveViaCopy, testConnectionViaBuckets } from './providerHelpers';
 import { azureFetch } from './azureSign';
 import {
   AZURITE_ACCOUNT_KEY,
@@ -49,14 +51,12 @@ export class AzureProvider implements StorageProvider {
   }
 
   private objectUrl(container: string, key: string): string {
-    const encodedKey = key.split('/').map(encodeURIComponent).join('/');
-    return `${this.containerUrl(container)}/${encodedKey}`;
+    return `${this.containerUrl(container)}/${encodeObjectKey(key)}`;
   }
 
   /** Direct blob URL for x-ms-copy-source (Azurite must fetch without nginx/proxy auth). */
   private copySourceUrl(container: string, key: string, versionId?: string): string {
-    const encodedKey = key.split('/').map(encodeURIComponent).join('/');
-    const base = `${getAzureDirectServiceUrl(this.accountName)}/${container}/${encodedKey}`;
+    const base = `${getAzureDirectServiceUrl(this.accountName)}/${container}/${encodeObjectKey(key)}`;
     return versionId ? `${base}?versionId=${encodeURIComponent(versionId)}` : base;
   }
 
@@ -116,12 +116,7 @@ export class AzureProvider implements StorageProvider {
   }
 
   async testConnection(): Promise<boolean> {
-    try {
-      await this.listBuckets();
-      return true;
-    } catch {
-      return false;
-    }
+    return testConnectionViaBuckets(this);
   }
 
   async listBuckets(): Promise<Bucket[]> {
@@ -129,10 +124,12 @@ export class AzureProvider implements StorageProvider {
     const res = await this.request(url);
     const text = await res.text();
     const doc = new DOMParser().parseFromString(text, 'text/xml');
-    return [...doc.getElementsByTagName('Name')].map((el) => ({
-      name: el.textContent!,
-      provider: 'azure' as const,
-    }));
+    return [...doc.getElementsByTagName('Name')]
+      .filter((el) => el.textContent !== null)
+      .map((el) => ({
+        name: el.textContent as string,
+        provider: 'azure' as const,
+      }));
   }
 
   async createBucket(name: string, _opts?: CreateBucketOpts): Promise<Bucket> {
@@ -270,8 +267,7 @@ export class AzureProvider implements StorageProvider {
   }
 
   async moveObject(src: ObjectRef, dst: ObjectRef): Promise<void> {
-    await this.copyObject(src, dst);
-    await this.deleteObject(src.bucket, src.key);
+    return moveViaCopy(this, src, dst);
   }
 
   async updateMetadata(

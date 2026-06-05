@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { createProvider, type ConnectionProfile } from '../api/providerFactory';
 import type { StorageProvider } from '../api/StorageProvider';
 import { buildDefaultProfiles, isDefaultProfileId, reconcileProfiles } from '../lib/reconcileProfiles';
+import { useActivityStore } from './activityStore';
 
 export type ConnectionStatus = 'connected' | 'disconnected' | 'checking' | 'unconfigured';
 
@@ -25,91 +26,122 @@ interface ConnectionState {
 
 const DEFAULT_PROFILES: ConnectionProfile[] = buildDefaultProfiles();
 
+/**
+ * Provider instance cache keyed by profile ID.
+ * Invalidated on updateProfile / removeProfile to avoid stale SDK clients.
+ */
+const providerCache = new Map<string, StorageProvider>();
+
+function getCachedProvider(profile: ConnectionProfile): StorageProvider {
+  const cached = providerCache.get(profile.id);
+  if (cached) return cached;
+  const logger = useActivityStore.getState();
+  const provider = createProvider(profile, logger);
+  providerCache.set(profile.id, provider);
+  return provider;
+}
+
+function invalidateProvider(id: string): void {
+  providerCache.delete(id);
+}
+
 export const useConnectionStore = create<ConnectionState>()(
   persist(
     (set, get) => ({
-  profiles: DEFAULT_PROFILES,
-  activeProfileId: 'default-gcs',
-  deletedDefaultIds: [],
-  connectionStatus: {},
-  connectionErrors: {},
+      profiles: DEFAULT_PROFILES,
+      activeProfileId: 'default-gcs',
+      deletedDefaultIds: [],
+      connectionStatus: {},
+      connectionErrors: {},
 
-  getActiveProvider: () => {
-    const { activeProfileId } = get();
-    return activeProfileId ? get().getProviderForProfile(activeProfileId) : null;
-  },
+      getActiveProvider: () => {
+        const { activeProfileId } = get();
+        return activeProfileId ? get().getProviderForProfile(activeProfileId) : null;
+      },
 
-  getProviderForProfile: (profileId) => {
-    const profile = get().profiles.find((p) => p.id === profileId);
-    if (!profile) return null;
-    return createProvider(profile);
-  },
+      getProviderForProfile: (profileId) => {
+        const profile = get().profiles.find((p) => p.id === profileId);
+        if (!profile) return null;
+        return getCachedProvider(profile);
+      },
 
-  addProfile: (profile) => set((s) => ({ profiles: [...s.profiles, profile] })),
+      addProfile: (profile) => set((s) => ({ profiles: [...s.profiles, profile] })),
 
-  updateProfile: (id, updates) =>
-    set((s) => ({
-      profiles: s.profiles.map((p) => (p.id === id ? { ...p, ...updates } : p)),
-    })),
+      updateProfile: (id, updates) => {
+        invalidateProvider(id);
+        set((s) => ({
+          profiles: s.profiles.map((p) => (p.id === id ? { ...p, ...updates } : p)),
+        }));
+      },
 
-  removeProfile: (id) =>
-    set((s) => {
-      const removed = s.profiles.find((p) => p.id === id);
-      if (!removed) return s;
-
-      const profiles = s.profiles.filter((p) => p.id !== id);
-      const deletedDefaultIds = isDefaultProfileId(id)
-        ? [...new Set([...s.deletedDefaultIds, id])]
-        : s.deletedDefaultIds;
-
-      const nextStatus = { ...s.connectionStatus };
-      const nextErrors = { ...s.connectionErrors };
-      delete nextStatus[id];
-      delete nextErrors[id];
-
-      const activeProfileId =
-        s.activeProfileId === id ? (profiles[0]?.id ?? null) : s.activeProfileId;
-
-      return {
-        profiles,
-        deletedDefaultIds,
-        activeProfileId,
-        connectionStatus: nextStatus,
-        connectionErrors: nextErrors,
-      };
-    }),
-
-  setActiveProfile: (id) => set({ activeProfileId: id }),
-
-  setStatus: (id, status) =>
-    set((s) => ({ connectionStatus: { ...s.connectionStatus, [id]: status } })),
-
-  testConnection: async (id) => {
-    const { profiles, setStatus } = get();
-    const profile = profiles.find((p) => p.id === id);
-    if (!profile) return false;
-    setStatus(id, 'checking');
-    try {
-      const provider = createProvider(profile);
-      const ok = await provider.testConnection();
-      setStatus(id, ok ? 'connected' : 'disconnected');
-      if (ok) {
+      removeProfile: (id) => {
+        invalidateProvider(id);
         set((s) => {
-          const next = { ...s.connectionErrors };
-          delete next[id];
-          return { connectionErrors: next };
+          const removed = s.profiles.find((p) => p.id === id);
+          if (!removed) return s;
+
+          const profiles = s.profiles.filter((p) => p.id !== id);
+          const deletedDefaultIds = isDefaultProfileId(id)
+            ? [...new Set([...s.deletedDefaultIds, id])]
+            : s.deletedDefaultIds;
+
+          const nextStatus = { ...s.connectionStatus };
+          const nextErrors = { ...s.connectionErrors };
+          delete nextStatus[id];
+          delete nextErrors[id];
+
+          const activeProfileId =
+            s.activeProfileId === id ? (profiles[0]?.id ?? null) : s.activeProfileId;
+
+          return {
+            profiles,
+            deletedDefaultIds,
+            activeProfileId,
+            connectionStatus: nextStatus,
+            connectionErrors: nextErrors,
+          };
         });
-      }
-      return ok;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Connection failed';
-      setStatus(id, 'disconnected');
-      set((s) => ({
-        connectionErrors: { ...s.connectionErrors, [id]: message },
-      }));
-      return false;
-    }
-  },
+      },
+
+      setActiveProfile: (id) => set({ activeProfileId: id }),
+
+      setStatus: (id, status) =>
+        set((s) => {
+          const nextErrors =
+            status === 'connected'
+              ? (() => {
+                  const next = { ...s.connectionErrors };
+                  delete next[id];
+                  return next;
+                })()
+              : s.connectionErrors;
+          return {
+            connectionStatus: { ...s.connectionStatus, [id]: status },
+            connectionErrors: nextErrors,
+          };
+        }),
+
+      testConnection: async (id) => {
+        const { profiles, setStatus } = get();
+        const profile = profiles.find((p) => p.id === id);
+        if (!profile) return false;
+        // Invalidate cache so we test with a fresh client (picks up config changes).
+        invalidateProvider(id);
+        setStatus(id, 'checking');
+        try {
+          const provider = getCachedProvider(profile);
+          const ok = await provider.testConnection();
+          setStatus(id, ok ? 'connected' : 'disconnected');
+          return ok;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'Connection failed';
+          setStatus(id, 'disconnected');
+          set((s) => ({
+            connectionErrors: { ...s.connectionErrors, [id]: message },
+          }));
+          return false;
+        }
+      },
     }),
     {
       name: 'storagepilot-connections',

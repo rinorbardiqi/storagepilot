@@ -1,11 +1,11 @@
 import { Copy, Download, MoreHorizontal, Trash2 } from 'lucide-react';
 import { formatBytes } from '../../lib/formatBytes';
 import { formatDate } from '../../lib/formatDate';
-import { matchesBrowserSearch, sortObjects, sortPrefixes } from '../../lib/sortObjects';
+import { objectDisplayName } from '../../lib/objectKey';
 import type { StorageObject } from '../../api/types';
-import { useAppStore } from '../../store/appStore';
 import { useModalStore } from '../../store/modalStore';
 import { useSelectionStore } from '../../store/selectionStore';
+import { useBrowserRows } from '../../hooks/useBrowserRows';
 import { SortHeader } from './BrowserChrome';
 import { Checkbox } from '../shared/Checkbox';
 import { FileIcon } from '../shared/FileIcon';
@@ -19,10 +19,12 @@ interface ObjectTableProps {
   onDelete?: (key: string) => void;
 }
 
-type TableRow = StorageObject & { isFolder?: boolean };
-
-function objectDisplayName(key: string): string {
-  return key.replace(/\/$/, '').split('/').pop() ?? key;
+function rowLabel(key: string, isFolder: boolean): string {
+  if (!isFolder) return objectDisplayName(key);
+  const name = key.endsWith('/')
+    ? key.split('/').filter(Boolean).pop()
+    : objectDisplayName(key);
+  return `${name}/`;
 }
 
 export function ObjectTable({
@@ -33,55 +35,22 @@ export function ObjectTable({
   onDownload,
   onDelete,
 }: ObjectTableProps) {
-  const browserSearchQuery = useAppStore((s) => s.browserSearchQuery);
-  const sortField = useAppStore((s) => s.sortField);
-  const sortDir = useAppStore((s) => s.sortDir);
   const selectedKeys = useSelectionStore((s) => s.selectedKeys);
   const toggle = useSelectionStore((s) => s.toggle);
   const selectAll = useSelectionStore((s) => s.selectAll);
   const clearSelection = useSelectionStore((s) => s.clearSelection);
   const openModal = useModalStore((s) => s.openModal);
 
-  const q = browserSearchQuery.trim().toLowerCase();
+  const { rows, fileKeys, isEmpty, query } = useBrowserRows(objects, prefixes);
 
-  const filtered = sortObjects(
-    objects.filter(
-      (o) =>
-        matchesBrowserSearch(o.key, q) ||
-        matchesBrowserSearch(objectDisplayName(o.key), q) ||
-        matchesBrowserSearch(o.contentType, q),
-    ),
-    sortField,
-    sortDir,
-  );
-
-  const filteredPrefixes = sortPrefixes(
-    prefixes.filter(
-      (p) => matchesBrowserSearch(p, q) || matchesBrowserSearch(objectDisplayName(p), q),
-    ),
-    sortDir,
-  );
-
-  const fileKeys = filtered.map((o) => o.key);
   const selectedCount = fileKeys.filter((k) => selectedKeys.has(k)).length;
   const allSelected = fileKeys.length > 0 && selectedCount === fileKeys.length;
   const someSelected = selectedCount > 0 && !allSelected;
 
-  const rows: TableRow[] = [
-    ...filteredPrefixes.map((p) => ({
-      key: p,
-      size: 0,
-      contentType: '',
-      lastModified: new Date(),
-      isFolder: true,
-    })),
-    ...filtered,
-  ];
-
-  if (!rows.length) {
+  if (isEmpty) {
     return (
       <div className="p-8 text-center text-sm text-[var(--text-muted)]">
-        {q ? `No objects matching "${browserSearchQuery}"` : 'No objects in this prefix'}
+        {query ? `No objects matching "${query}"` : 'No objects in this prefix'}
       </div>
     );
   }
@@ -115,13 +84,9 @@ export function ObjectTable({
       </thead>
       <tbody>
         {rows.map((obj) => {
-          const isFolder = obj.isFolder || obj.key.endsWith('/');
+          const { isFolder } = obj;
           const selected = !isFolder && selectedKeys.has(obj.key);
-          const label = isFolder
-            ? obj.key.endsWith('/')
-              ? obj.key.split('/').filter(Boolean).pop() + '/'
-              : `${objectDisplayName(obj.key)}/`
-            : objectDisplayName(obj.key);
+          const label = rowLabel(obj.key, isFolder);
           return (
             <tr
               key={obj.key}
@@ -168,6 +133,7 @@ export function ObjectTable({
                     <button
                       type="button"
                       className="p-1 text-[var(--text-muted)] hover:text-[var(--accent)]"
+                      aria-label={`Download ${label}`}
                       title="Download"
                       onClick={() => onDownload?.(obj.key)}
                     >
@@ -176,6 +142,7 @@ export function ObjectTable({
                     <button
                       type="button"
                       className="p-1 text-[var(--text-muted)] hover:text-[var(--accent)]"
+                      aria-label={`Copy ${label}`}
                       title="Copy"
                       onClick={() =>
                         openModal('copyMove', {
@@ -190,6 +157,7 @@ export function ObjectTable({
                     <button
                       type="button"
                       className="p-1 text-[var(--text-muted)] hover:text-[var(--error)]"
+                      aria-label={`Delete ${label}`}
                       title="Delete"
                       onClick={() => onDelete?.(obj.key)}
                     >
@@ -198,6 +166,7 @@ export function ObjectTable({
                     <button
                       type="button"
                       className="p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                      aria-label={`More options for ${label}`}
                       title="More"
                       onClick={() => onOpenObject?.(obj)}
                     >

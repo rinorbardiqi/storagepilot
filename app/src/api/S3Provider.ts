@@ -18,6 +18,8 @@ import { prepareBucketName } from '../lib/bucketName';
 import { buildPathFormats } from '../lib/pathFormatters';
 import { assertUploadBlob, toUploadBytes } from '../lib/uploadBody';
 import { s3CopySource } from '../lib/s3CopySource';
+import { encodeObjectKey } from '../lib/objectKey';
+import { DEFAULT_CORS_MAX_AGE, moveViaCopy, testConnectionViaBuckets } from './providerHelpers';
 import { resolveApiUrl } from '../lib/resolveApiUrl';
 import { normalizeS3Endpoint } from '../lib/emulatorEndpoints';
 import type { StorageProvider } from './StorageProvider';
@@ -82,12 +84,7 @@ export class S3Provider implements StorageProvider {
   }
 
   async testConnection(): Promise<boolean> {
-    try {
-      await this.listBuckets();
-      return true;
-    } catch {
-      return false;
-    }
+    return testConnectionViaBuckets(this);
   }
 
   async listBuckets(): Promise<Bucket[]> {
@@ -154,7 +151,7 @@ export class S3Provider implements StorageProvider {
         origins: r.AllowedOrigins ?? [],
         methods: r.AllowedMethods ?? [],
         headers: r.AllowedHeaders ?? [],
-        maxAgeSeconds: r.MaxAgeSeconds ?? 3600,
+        maxAgeSeconds: r.MaxAgeSeconds ?? DEFAULT_CORS_MAX_AGE,
       }));
     } catch (err) {
       // S3/MinIO returns NoSuchCORSConfiguration (404) when no rules are set —
@@ -183,16 +180,20 @@ export class S3Provider implements StorageProvider {
         }),
       );
 
-      const objects = (res.Contents ?? []).map((item) => ({
-        key: item.Key!,
-        size: item.Size ?? 0,
-        contentType: 'application/octet-stream',
-        lastModified: item.LastModified ?? new Date(),
-        etag: item.ETag?.replace(/"/g, ''),
-        isFolder: item.Key!.endsWith('/'),
-      }));
+      const objects = (res.Contents ?? [])
+        .filter((item): item is typeof item & { Key: string } => Boolean(item.Key))
+        .map((item) => ({
+          key: item.Key,
+          size: item.Size ?? 0,
+          contentType: 'application/octet-stream',
+          lastModified: item.LastModified ?? new Date(),
+          etag: item.ETag?.replace(/"/g, ''),
+          isFolder: item.Key.endsWith('/'),
+        }));
 
-      const prefixes = (res.CommonPrefixes ?? []).map((p) => p.Prefix!);
+      const prefixes = (res.CommonPrefixes ?? [])
+        .filter((p): p is typeof p & { Prefix: string } => Boolean(p.Prefix))
+        .map((p) => p.Prefix);
 
       return {
         objects,
@@ -207,7 +208,8 @@ export class S3Provider implements StorageProvider {
   async getObject(bucket: string, key: string): Promise<Blob> {
     try {
       const res = await this.client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
-      const bytes = await res.Body!.transformToByteArray();
+      if (!res.Body) throw new StorageError('NOT_FOUND', 'Empty response body', 's3');
+      const bytes = await res.Body.transformToByteArray();
       return new Blob([bytes], { type: res.ContentType ?? 'application/octet-stream' });
     } catch (err) {
       this.wrapError(err, 'getObject');
@@ -280,8 +282,7 @@ export class S3Provider implements StorageProvider {
   }
 
   async moveObject(src: ObjectRef, dst: ObjectRef): Promise<void> {
-    await this.copyObject(src, dst);
-    await this.deleteObject(src.bucket, src.key);
+    return moveViaCopy(this, src, dst);
   }
 
   async updateMetadata(
@@ -338,8 +339,7 @@ export class S3Provider implements StorageProvider {
   }
 
   getObjectUrl(bucket: string, key: string): string {
-    const encodedKey = key.split('/').map(encodeURIComponent).join('/');
-    return `${this.baseUrl}/${bucket}/${encodedKey}`;
+    return `${this.baseUrl}/${bucket}/${encodeObjectKey(key)}`;
   }
 
   getPathFormats(bucket: string, key: string): PathFormats {

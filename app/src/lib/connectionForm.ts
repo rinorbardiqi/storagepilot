@@ -68,7 +68,6 @@ export function profileFromForm(
     name: values.name.trim() || defaultProfileName(tab),
     type: tab,
     gcsUrl: tab === 'gcs' ? values.gcsUrl : undefined,
-    gcsScheme: tab === 'gcs' ? 'http' : undefined,
     s3Endpoint: tab === 's3' ? values.s3Endpoint : undefined,
     s3AccessKey: tab === 's3' ? values.s3AccessKey : undefined,
     s3SecretKey: tab === 's3' ? values.s3SecretKey : undefined,

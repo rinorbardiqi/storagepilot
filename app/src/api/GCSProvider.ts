@@ -1,6 +1,7 @@
 import { computeBucketStats } from '../lib/bucketStats';
 import { prepareBucketName } from '../lib/bucketName';
 import { buildPathFormats } from '../lib/pathFormatters';
+import { DEFAULT_CORS_MAX_AGE, moveViaCopy, testConnectionViaBuckets } from './providerHelpers';
 import type { StorageProvider } from './StorageProvider';
 import type {
   Bucket,
@@ -20,7 +21,6 @@ import { fetchWithError, notImplemented, StorageError } from './types';
 export interface GCSConfig {
   type: 'gcs';
   gcsUrl?: string;
-  gcsScheme?: 'http' | 'https';
 }
 
 interface GCSBucketItem {
@@ -56,12 +56,7 @@ export class GCSProvider implements StorageProvider {
   }
 
   async testConnection(): Promise<boolean> {
-    try {
-      await this.listBuckets();
-      return true;
-    } catch {
-      return false;
-    }
+    return testConnectionViaBuckets(this);
   }
 
   async listBuckets(): Promise<Bucket[]> {
@@ -130,7 +125,7 @@ export class GCSProvider implements StorageProvider {
       origins: r.origin ?? [],
       methods: r.method ?? [],
       headers: r.responseHeader ?? [],
-      maxAgeSeconds: r.maxAgeSeconds ?? 3600,
+      maxAgeSeconds: r.maxAgeSeconds ?? DEFAULT_CORS_MAX_AGE,
     }));
   }
 
@@ -201,7 +196,7 @@ export class GCSProvider implements StorageProvider {
       const metadata = JSON.stringify({
         name: key,
         contentType: opts?.contentType ?? (file.type || 'application/octet-stream'),
-        metadata: opts!.customMetadata,
+        metadata: opts?.customMetadata,
       });
       const boundary = `sp_boundary_${crypto.randomUUID().replace(/-/g, '')}`;
       const metaPart = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n`;
@@ -238,8 +233,7 @@ export class GCSProvider implements StorageProvider {
   }
 
   async moveObject(src: ObjectRef, dst: ObjectRef): Promise<void> {
-    await this.copyObject(src, dst);
-    await this.deleteObject(src.bucket, src.key);
+    return moveViaCopy(this, src, dst);
   }
 
   async updateMetadata(
@@ -266,7 +260,7 @@ export class GCSProvider implements StorageProvider {
         return [this.toObjectVersion(current, true)];
       } catch (err) {
         // Return empty only for confirmed "not found"; rethrow auth/network errors.
-        if (err instanceof StorageError && (err as StorageError).code === 'NOT_FOUND') return [];
+        if (err instanceof StorageError && err.code === 'NOT_FOUND') return [];
         throw err;
       }
     }

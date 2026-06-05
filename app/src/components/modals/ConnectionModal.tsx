@@ -34,7 +34,10 @@ export function ConnectionModal() {
   const profiles = useConnectionStore((s) => s.profiles);
   const updateProfile = useConnectionStore((s) => s.updateProfile);
   const addProfile = useConnectionStore((s) => s.addProfile);
+  const setActiveProfile = useConnectionStore((s) => s.setActiveProfile);
   const testConnection = useConnectionStore((s) => s.testConnection);
+  const enabledProviders = usePreferencesStore((s) => s.enabledProviders);
+  const setEnabledProviders = usePreferencesStore((s) => s.setEnabledProviders);
   const completeOnboarding = usePreferencesStore((s) => s.completeOnboarding);
   const toast = useToast();
 
@@ -85,7 +88,7 @@ export function ConnectionModal() {
     setAzureAccountKey(form.azureAccountKey);
   }, [tab, isOpen, isCreate]);
 
-  const persistProfile = (): string => {
+  const saveAndActivateProfile = (): string => {
     const values = {
       name,
       gcsUrl,
@@ -97,15 +100,18 @@ export function ConnectionModal() {
       azureAccountKey,
     };
 
+    const enableProvider = () => {
+      if (!enabledProviders.includes(tab)) {
+        setEnabledProviders([...enabledProviders, tab]);
+      }
+    };
+
     if (isCreate) {
       const id = crypto.randomUUID();
       const profile = profileFromForm(tab, values, id);
       addProfile(profile);
-      useConnectionStore.getState().setActiveProfile(id);
-      const prefs = usePreferencesStore.getState();
-      if (!prefs.enabledProviders.includes(tab)) {
-        prefs.setEnabledProviders([...prefs.enabledProviders, tab]);
-      }
+      setActiveProfile(id);
+      enableProvider();
       completeOnboarding();
       return id;
     }
@@ -113,22 +119,19 @@ export function ConnectionModal() {
     const id = editingProfile?.id ?? payload?.profileId;
     if (!id) return '';
     updateProfile(id, profileFromForm(tab, values, id));
-    useConnectionStore.getState().setActiveProfile(id);
-    const prefs = usePreferencesStore.getState();
-    if (!prefs.enabledProviders.includes(tab)) {
-      prefs.setEnabledProviders([...prefs.enabledProviders, tab]);
-    }
+    setActiveProfile(id);
+    enableProvider();
     completeOnboarding();
     return id;
   };
 
   const save = () => {
-    persistProfile();
+    saveAndActivateProfile();
     closeModal('connection');
   };
 
   const handleTest = async () => {
-    const id = persistProfile();
+    const id = saveAndActivateProfile();
     if (!id) return;
     const ok = await testConnection(id);
     toast[ok ? 'success' : 'error'](ok ? 'Connection successful' : 'Connection failed');

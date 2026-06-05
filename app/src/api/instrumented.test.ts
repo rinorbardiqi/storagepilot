@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { instrument } from '../api/instrumented';
+import { nullLogger } from '../api/ActivityLogger';
 import type { StorageProvider } from '../api/StorageProvider';
 
 function mockProvider(): StorageProvider {
@@ -51,7 +52,7 @@ function mockProvider(): StorageProvider {
 
 describe('instrument', () => {
   it('returns sync values from getObjectUrl and getPathFormats without Promises', () => {
-    const wrapped = instrument(mockProvider());
+    const wrapped = instrument(mockProvider(), nullLogger);
 
     const url = wrapped.getObjectUrl('photos', 'img.png');
     expect(url).toBe('http://localhost:9000/photos/img.png');
@@ -63,7 +64,7 @@ describe('instrument', () => {
   });
 
   it('still wraps async API methods', async () => {
-    const wrapped = instrument(mockProvider());
+    const wrapped = instrument(mockProvider(), nullLogger);
     const result = wrapped.listBuckets();
     expect(result).toBeInstanceOf(Promise);
     await result;

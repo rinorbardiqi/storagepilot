@@ -42,14 +42,16 @@ export function CopyMoveModal() {
   const destProfile = profiles.find((p) => p.id === destProfileId);
   const crossTarget = destProfileId !== activeProfileId;
 
+  // Only reset when the modal opens (payload changes), not on every profiles reference update.
   useEffect(() => {
     if (payload) {
       setOperation(payload.operation);
       setDestBucket(currentBucket ?? "");
-      setDestProfileId(activeProfileId ?? profiles[0]?.id ?? "");
+      setDestProfileId(activeProfileId ?? "");
       setDestPrefix(currentPrefix);
     }
-  }, [payload, currentBucket, currentPrefix, activeProfileId, profiles]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only on modal open
+  }, [payload]);
 
   useEffect(() => {
     if (!destProfileId) {
@@ -64,20 +66,23 @@ export function CopyMoveModal() {
       .then((list) => {
         if (!cancelled) setDestBuckets(list);
       })
-      .catch(() => {
-        if (!cancelled) setDestBuckets([]);
+      .catch((err) => {
+        if (!cancelled) {
+          setDestBuckets([]);
+          toast.error(err instanceof Error ? err.message : "Failed to load destination buckets");
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [destProfileId, getProviderForProfile]);
+  }, [destProfileId, getProviderForProfile, toast]);
 
   const totalSize = useMemo(
     () => payload?.sizes?.reduce((sum, n) => sum + n, 0) ?? 0,
     [payload?.sizes],
   );
 
-  const run = async () => {
+  const confirmTransfer = async () => {
     const source = getActiveProvider();
     const destination = getProviderForProfile(destProfileId);
     if (
@@ -180,7 +185,7 @@ export function CopyMoveModal() {
           <button
             type="button"
             disabled={!destBucket || busy}
-            onClick={() => void run()}
+            onClick={() => void confirmTransfer()}
             className="h-10 px-8 bg-[var(--accent-copy)] text-black text-xs font-bold uppercase tracking-wider hover:opacity-90 disabled:opacity-50"
           >
             {busy
