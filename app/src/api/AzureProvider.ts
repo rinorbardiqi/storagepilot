@@ -1,8 +1,8 @@
 import { computeBucketStats } from '../lib/bucketStats';
 import { prepareBucketName } from '../lib/bucketName';
-import { appendAzureQuery } from '../lib/azureQuery';
+import { appendAzureQuery } from './azureQuery';
 import { buildPathFormats } from '../lib/pathFormatters';
-import { azureFetch } from '../lib/azureSign';
+import { azureFetch } from './azureSign';
 import {
   AZURITE_ACCOUNT_KEY,
   getAzureDirectServiceUrl,

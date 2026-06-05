@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { shikiLanguageFor } from '../../../lib/contentTypeIcons';
-import { highlightCode } from './shikiHighlighter';
+import { highlightCode } from '../../../lib/shikiHighlighter';
 
 interface TextPreviewProps {
   blob: Blob;

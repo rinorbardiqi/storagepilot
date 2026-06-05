@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { highlightCode } from './shikiHighlighter';
+import { highlightCode } from '../../../lib/shikiHighlighter';
 
 interface JsonPreviewProps {
   blob: Blob;
