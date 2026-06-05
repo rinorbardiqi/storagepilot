@@ -14,6 +14,7 @@ interface ConnectionState {
   connectionErrors: Record<string, string>;
 
   getActiveProvider: () => StorageProvider | null;
+  getProviderForProfile: (profileId: string) => StorageProvider | null;
   addProfile: (profile: ConnectionProfile) => void;
   updateProfile: (id: string, updates: Partial<ConnectionProfile>) => void;
   removeProfile: (id: string) => void;
@@ -34,8 +35,12 @@ export const useConnectionStore = create<ConnectionState>()(
   connectionErrors: {},
 
   getActiveProvider: () => {
-    const { profiles, activeProfileId } = get();
-    const profile = profiles.find((p) => p.id === activeProfileId);
+    const { activeProfileId } = get();
+    return activeProfileId ? get().getProviderForProfile(activeProfileId) : null;
+  },
+
+  getProviderForProfile: (profileId) => {
+    const profile = get().profiles.find((p) => p.id === profileId);
     if (!profile) return null;
     return createProvider(profile);
   },

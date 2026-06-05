@@ -1,9 +1,11 @@
 import { computeBucketStats } from '../lib/bucketStats';
 import { prepareBucketName } from '../lib/bucketName';
+import { appendAzureQuery } from '../lib/azureQuery';
 import { buildPathFormats } from '../lib/pathFormatters';
 import { azureFetch } from '../lib/azureSign';
 import {
   AZURITE_ACCOUNT_KEY,
+  getAzureDirectServiceUrl,
   normalizeAzureServiceUrl,
 } from '../lib/emulatorEndpoints';
 import type { StorageProvider } from './StorageProvider';
@@ -44,6 +46,55 @@ export class AzureProvider implements StorageProvider {
 
   private containerUrl(container: string): string {
     return `${this.baseUrl}/${container}`;
+  }
+
+  private objectUrl(container: string, key: string): string {
+    const encodedKey = key.split('/').map(encodeURIComponent).join('/');
+    return `${this.containerUrl(container)}/${encodedKey}`;
+  }
+
+  /** Direct blob URL for x-ms-copy-source (Azurite must fetch without nginx/proxy auth). */
+  private copySourceUrl(container: string, key: string, versionId?: string): string {
+    const encodedKey = key.split('/').map(encodeURIComponent).join('/');
+    const base = `${getAzureDirectServiceUrl(this.accountName)}/${container}/${encodedKey}`;
+    return versionId ? `${base}?versionId=${encodeURIComponent(versionId)}` : base;
+  }
+
+  private parseBlobVersions(doc: Document, key: string): ObjectVersion[] {
+    return [...doc.getElementsByTagName('Blob')]
+      .map((blob) => {
+        const name = blob.getElementsByTagName('Name')[0]?.textContent ?? '';
+        if (name !== key) return null;
+
+        const props = blob.getElementsByTagName('Properties')[0];
+        const versionId =
+          blob.getElementsByTagName('VersionId')[0]?.textContent?.trim() ||
+          props?.getElementsByTagName('Etag')[0]?.textContent?.replace(/"/g, '') ||
+          props?.getElementsByTagName('ETag')[0]?.textContent?.replace(/"/g, '') ||
+          '';
+        if (!versionId) return null;
+
+        const isLatest =
+          blob.getElementsByTagName('IsCurrentVersion')[0]?.textContent === 'true' ||
+          blob.getElementsByTagName('IsLatestVersion')[0]?.textContent === 'true';
+
+        const size = Number(props?.getElementsByTagName('Content-Length')[0]?.textContent ?? 0);
+        const lastModified =
+          props?.getElementsByTagName('Last-Modified')[0]?.textContent ?? new Date().toISOString();
+        const etag =
+          props?.getElementsByTagName('Etag')[0]?.textContent?.replace(/"/g, '') ??
+          props?.getElementsByTagName('ETag')[0]?.textContent?.replace(/"/g, '') ??
+          '';
+
+        return {
+          versionId,
+          size,
+          lastModified: new Date(lastModified),
+          isLatest,
+          etag,
+        };
+      })
+      .filter((v): v is ObjectVersion => v !== null);
   }
 
   private async request(url: string, init?: RequestInit): Promise<Response> {
@@ -109,16 +160,14 @@ export class AzureProvider implements StorageProvider {
   }
 
   async listObjects(container: string, opts: ListOpts = {}): Promise<ListResult> {
-    const params = new URLSearchParams({
+    const url = appendAzureQuery(this.containerUrl(container), {
       restype: 'container',
       comp: 'list',
+      prefix: opts.prefix,
+      delimiter: opts.delimiter,
+      maxresults: opts.maxResults ? String(opts.maxResults) : undefined,
+      marker: opts.pageToken,
     });
-    if (opts.prefix) params.set('prefix', opts.prefix);
-    if (opts.delimiter) params.set('delimiter', opts.delimiter);
-    if (opts.maxResults) params.set('maxresults', String(opts.maxResults));
-    if (opts.pageToken) params.set('marker', opts.pageToken);
-
-    const url = `${this.containerUrl(container)}?${params}`;
     const res = await this.request(url);
     const text = await res.text();
     const doc = new DOMParser().parseFromString(text, 'text/xml');
@@ -150,13 +199,13 @@ export class AzureProvider implements StorageProvider {
   }
 
   async getObject(container: string, key: string): Promise<Blob> {
-    const url = `${this.containerUrl(container)}/${key}`;
+    const url = this.objectUrl(container, key);
     const res = await this.request(url);
     return res.blob();
   }
 
   async getObjectMetadata(container: string, key: string): Promise<ObjectMetadata> {
-    const url = `${this.containerUrl(container)}/${key}`;
+    const url = this.objectUrl(container, key);
     const res = await this.request(url, { method: 'HEAD' });
     return {
       key,
@@ -164,7 +213,8 @@ export class AzureProvider implements StorageProvider {
       size: Number(res.headers.get('content-length') ?? 0),
       contentType: res.headers.get('content-type') ?? 'application/octet-stream',
       lastModified: new Date(res.headers.get('last-modified') ?? Date.now()),
-      etag: res.headers.get('etag') ?? '',
+      etag: res.headers.get('etag')?.replace(/"/g, '') ?? '',
+      versionId: res.headers.get('x-ms-version-id') ?? undefined,
       customMetadata: {},
       provider: 'azure',
     };
@@ -176,7 +226,7 @@ export class AzureProvider implements StorageProvider {
     file: File,
     opts?: UploadOpts,
   ): Promise<void> {
-    const url = `${this.containerUrl(container)}/${key}`;
+    const url = this.objectUrl(container, key);
     await this.request(url, {
       method: 'PUT',
       headers: {
@@ -189,13 +239,13 @@ export class AzureProvider implements StorageProvider {
   }
 
   async deleteObject(container: string, key: string): Promise<void> {
-    const url = `${this.containerUrl(container)}/${key}`;
+    const url = this.objectUrl(container, key);
     await this.request(url, { method: 'DELETE' });
   }
 
   async copyObject(src: ObjectRef, dst: ObjectRef): Promise<void> {
-    const sourceUrl = `${this.containerUrl(src.bucket)}/${src.key}`;
-    const url = `${this.containerUrl(dst.bucket)}/${dst.key}`;
+    const sourceUrl = this.copySourceUrl(src.bucket, src.key);
+    const url = this.objectUrl(dst.bucket, dst.key);
     await this.request(url, {
       method: 'PUT',
       headers: { 'x-ms-copy-source': sourceUrl },
@@ -215,20 +265,72 @@ export class AzureProvider implements StorageProvider {
     return notImplemented('azure', 'updateMetadata');
   }
 
-  async listVersions(_bucket: string, _key: string): Promise<ObjectVersion[]> {
-    return notImplemented('azure', 'listVersions');
+  async listVersions(container: string, key: string): Promise<ObjectVersion[]> {
+    const versions: ObjectVersion[] = [];
+    let marker: string | undefined;
+
+    for (let page = 0; page < 50; page++) {
+      const url = appendAzureQuery(this.containerUrl(container), {
+        restype: 'container',
+        comp: 'list',
+        prefix: key,
+        include: 'versions',
+        marker,
+      });
+      const res = await this.request(url);
+      const text = await res.text();
+      const doc = new DOMParser().parseFromString(text, 'text/xml');
+      versions.push(...this.parseBlobVersions(doc, key));
+
+      const next = doc.getElementsByTagName('NextMarker')[0]?.textContent?.trim();
+      if (!next || next === marker) break;
+      marker = next;
+    }
+
+    if (versions.length) {
+      const hasLatest = versions.some((v) => v.isLatest);
+      if (!hasLatest && versions.length === 1) {
+        versions[0]!.isLatest = true;
+      }
+      return versions.sort(
+        (a, b) => b.lastModified.getTime() - a.lastModified.getTime(),
+      );
+    }
+
+    try {
+      const meta = await this.getObjectMetadata(container, key);
+      return [
+        {
+          versionId: meta.versionId ?? meta.etag ?? 'current',
+          size: meta.size,
+          lastModified: meta.lastModified,
+          isLatest: true,
+          etag: meta.etag,
+        },
+      ];
+    } catch {
+      return [];
+    }
   }
 
-  async restoreVersion(_bucket: string, _key: string, _versionId: string): Promise<void> {
-    return notImplemented('azure', 'restoreVersion');
+  async restoreVersion(container: string, key: string, versionId: string): Promise<void> {
+    const url = this.objectUrl(container, key);
+    await this.request(url, {
+      method: 'PUT',
+      headers: { 'x-ms-copy-source': this.copySourceUrl(container, key, versionId) },
+    });
   }
 
-  async deleteVersion(_bucket: string, _key: string, _versionId: string): Promise<void> {
-    return notImplemented('azure', 'deleteVersion');
+  async deleteVersion(container: string, key: string, versionId: string): Promise<void> {
+    const url = this.objectUrl(container, key);
+    await this.request(url, {
+      method: 'DELETE',
+      headers: { 'x-ms-version-id': versionId },
+    });
   }
 
   getObjectUrl(container: string, key: string): string {
-    return `${this.containerUrl(container)}/${key}`;
+    return this.objectUrl(container, key);
   }
 
   getPathFormats(container: string, key: string): PathFormats {

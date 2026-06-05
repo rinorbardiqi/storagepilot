@@ -11,6 +11,9 @@ const EMPTY: ListResult = { objects: [], prefixes: [] };
 export function useObjects() {
   const getActiveProvider = useConnectionStore((s) => s.getActiveProvider);
   const activeProfileId = useConnectionStore((s) => s.activeProfileId);
+  const connectionStatus = useConnectionStore((s) =>
+    activeProfileId ? s.connectionStatus[activeProfileId] : undefined,
+  );
   const currentBucket = useAppStore((s) => s.currentBucket);
   const currentPrefix = useAppStore((s) => s.currentPrefix);
   const objectsRevision = useAppStore((s) => s.objectsRevision);
@@ -35,7 +38,7 @@ export function useObjects() {
 
   const refresh = useCallback(async () => {
     const provider = getActiveProvider();
-    if (!provider || !currentBucket) {
+    if (!provider || !currentBucket || connectionStatus !== 'connected') {
       setData(EMPTY);
       return;
     }
@@ -66,6 +69,7 @@ export function useObjects() {
     }
   }, [
     getActiveProvider,
+    connectionStatus,
     currentBucket,
     currentPrefix,
     pageToken,

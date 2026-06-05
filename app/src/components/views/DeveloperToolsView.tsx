@@ -234,7 +234,7 @@ export function DeveloperToolsView() {
             className="h-9 border border-[var(--border)] text-[10px] font-bold uppercase tracking-wider hover:bg-[var(--bg-elevated)]"
             onClick={(e) => {
               e.stopPropagation();
-              openModal('exportImport');
+              openModal('exportImport', { tab: 'export' });
             }}
           >
             Export
@@ -244,14 +244,14 @@ export function DeveloperToolsView() {
             className="h-9 border border-[var(--border)] text-[10px] font-bold uppercase tracking-wider hover:bg-[var(--bg-elevated)]"
             onClick={(e) => {
               e.stopPropagation();
-              openModal('exportImport');
+              openModal('exportImport', { tab: 'import' });
             }}
           >
             Import
           </button>
         </div>
       ),
-      onClick: () => openModal('exportImport'),
+      onClick: () => openModal('exportImport', { tab: 'export' }),
     },
     {
       id: 'shortcuts',

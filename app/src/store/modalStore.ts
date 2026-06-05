@@ -23,12 +23,12 @@ export interface ModalPayloads {
   connection: { profileId?: string; tab?: ProviderType; mode?: 'create' | 'edit' };
   newBucket: Record<string, never>;
   upload: Record<string, never>;
-  copyMove: { operation: 'copy' | 'move'; keys: string[] };
+  copyMove: { operation: 'copy' | 'move'; keys: string[]; sizes?: number[] };
   stats: { bucket: string };
   cors: { bucket?: string };
   fakeData: { bucket?: string };
-  snippet: { bucket: string; key: string };
-  exportImport: Record<string, never>;
+  snippet: { bucket: string; key: string; profileId?: string; operation?: 'download' | 'upload' | 'list' | 'delete' };
+  exportImport: { tab?: 'export' | 'import' };
   shortcuts: Record<string, never>;
   bulkConfirm: { count: number; label: string; onConfirm: () => void };
   newFolder: { bucket: string; prefix: string };

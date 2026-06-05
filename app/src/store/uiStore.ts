@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { ActivityFilter } from '../lib/activityOperation';
 import type { StorageObject } from '../api/types';
 
 export type DetailTab = 'metadata' | 'preview' | 'versions';
@@ -11,7 +12,7 @@ interface UiState {
 
   activityDrawerOpen: boolean;
   activityDrawerHeight: number;
-  activityFilter: 'all' | 'success' | 'error';
+  activityFilter: ActivityFilter;
   activitySearch: string;
   expandedActivityId: string | null;
 
@@ -32,7 +33,7 @@ interface UiState {
   setActivityDrawerOpen: (open: boolean) => void;
   toggleActivityDrawer: () => void;
   setActivityDrawerHeight: (height: number) => void;
-  setActivityFilter: (filter: UiState['activityFilter']) => void;
+  setActivityFilter: (filter: ActivityFilter) => void;
   setActivitySearch: (q: string) => void;
   setExpandedActivityId: (id: string | null) => void;
 

@@ -203,15 +203,15 @@ docker compose up fake-gcs minio azurite -d
 
 # Run the dev server
 cd app
-npm install
-npm run dev
+pnpm install
+pnpm run dev
 ```
 
 Vite proxies `/api/gcs`, `/api/s3`, and `/api/azure` to the emulators (see `app/vite.config.ts`).
 
 ```bash
 # Run tests
-cd app && npm test
+cd app && pnpm test
 ```
 
 ## Architecture

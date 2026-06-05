@@ -1,6 +1,6 @@
 /** Azure Blob SharedKey signing for browser (Web Crypto). Azurite / dev only. */
 
-const MS_VERSION = '2026-02-06';
+const MS_VERSION = '2023-11-03';
 
 /** Nginx proxy prefix — stripped from canonical resource (Azurite never sees this). */
 const AZURE_PROXY_PREFIX = '/api/azure';
@@ -47,15 +47,34 @@ function blobPathname(pathname: string): string {
   return path;
 }
 
-/** Path-style Azurite URLs sign as /{account}{path} (see @azure/storage-common SharedKey policy). */
+function parseQueryPairs(search: string): [string, string][] {
+  const raw = search.startsWith('?') ? search.slice(1) : search;
+  if (!raw) return [];
+
+  const decode = (segment: string) =>
+    decodeURIComponent(segment.replace(/\+/g, '%20'));
+
+  return raw
+    .split('&')
+    .filter(Boolean)
+    .map((part) => {
+      const eq = part.indexOf('=');
+      const name = eq === -1 ? part : part.slice(0, eq);
+      const value = eq === -1 ? '' : part.slice(eq + 1);
+      return [decode(name), decode(value)] as [string, string];
+    })
+    .sort(([a], [b]) => a.localeCompare(b));
+}
+
 function canonicalizedResource(accountName: string, url: URL): string {
   let path = blobPathname(url.pathname);
   if (!path.startsWith('/')) path = `/${path}`;
-  if (path === `/${accountName}`) path = `/${accountName}/`;
 
-  let resource = `/${accountName}${path}`;
-  const params = [...url.searchParams.entries()].sort(([a], [b]) => a.localeCompare(b));
-  for (const [key, value] of params) {
+  // Azure SharedKey: /{accountName}{absolutePath}, lowercased (path-style emulators include account in path).
+  let resource = `/${accountName}${path}`.toLowerCase();
+
+  // Query values keep original casing — Azurite validates prefix case literally (Azure cloud lowercases).
+  for (const [key, value] of parseQueryPairs(url.search)) {
     resource += `\n${key.toLowerCase()}:${value}`;
   }
   return resource;
@@ -71,8 +90,8 @@ async function signStringToSign(
   const stringToSign =
     [
       method.toUpperCase(),
-      getHeader(headers, 'Content-Language'),
       getHeader(headers, 'Content-Encoding'),
+      getHeader(headers, 'Content-Language'),
       getHeader(headers, 'Content-Length'),
       getHeader(headers, 'Content-MD5'),
       getHeader(headers, 'Content-Type'),

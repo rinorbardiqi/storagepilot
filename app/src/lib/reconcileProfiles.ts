@@ -4,6 +4,7 @@ import {
   getDefaultAzureBlobServiceUrl,
   getDefaultGcsBase,
   getDefaultS3Endpoint,
+  normalizeAzureServiceUrl,
 } from './emulatorEndpoints';
 
 const DEFAULT_IDS = ['default-gcs', 'default-s3', 'default-azure'] as const;
@@ -63,6 +64,14 @@ export function reconcileProfiles(
         ...saved,
         id: def.id,
         type: def.type,
+        ...(def.type === 'azure'
+          ? {
+              azureHost: normalizeAzureServiceUrl(
+                saved.azureHost ?? def.azureHost,
+                saved.azureAccountName ?? def.azureAccountName ?? 'devstoreaccount1',
+              ),
+            }
+          : {}),
       };
     });
 

@@ -3,7 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAppStore } from '../store/appStore';
 import { useConnectionStore } from '../store/connectionStore';
 
-export function useUrlState() {
+export function useUrlState(hydrated = true) {
   const { provider, bucket, '*': prefix = '' } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -11,6 +11,7 @@ export function useUrlState() {
   const { profiles, setActiveProfile } = useConnectionStore();
 
   useEffect(() => {
+    if (!hydrated) return;
     if (provider) {
       const profile = profiles.find((p) => p.type === provider);
       if (profile) setActiveProfile(profile.id);
@@ -22,6 +23,7 @@ export function useUrlState() {
     const query = searchParams.get('q');
     if (query) setSearchQuery(query);
   }, [
+    hydrated,
     provider,
     bucket,
     prefix,

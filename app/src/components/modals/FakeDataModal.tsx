@@ -7,8 +7,10 @@ import { useToast } from '../../hooks/useToast';
 import {
   createFakeFile,
   FAKE_DATA_KINDS,
+  FAKE_DATA_PRESETS,
   parseSizeRange,
   type FakeDataKind,
+  type FakeDataPreset,
 } from '../../lib/fakeDataGenerator';
 import { Button } from '../shared/Button';
 import { Input } from '../shared/Input';
@@ -19,10 +21,14 @@ export function FakeDataModal() {
   const closeModal = useModalStore((s) => s.closeModal);
   const payload = useModalStore((s) => s.active.fakeData);
   const getActiveProvider = useConnectionStore((s) => s.getActiveProvider);
+  const activeProfileId = useConnectionStore((s) => s.activeProfileId);
+  const connectionStatus = useConnectionStore((s) =>
+    activeProfileId ? s.connectionStatus[activeProfileId] : undefined,
+  );
   const currentBucket = useAppStore((s) => s.currentBucket);
   const currentPrefix = useAppStore((s) => s.currentPrefix);
   const invalidateObjects = useAppStore((s) => s.invalidateObjects);
-  const { buckets, loading: bucketsLoading } = useBuckets();
+  const { buckets, loading: bucketsLoading, refresh: refreshBuckets } = useBuckets();
   const toast = useToast();
 
   const [selectedBucket, setSelectedBucket] = useState<string>('');
@@ -31,6 +37,7 @@ export function FakeDataModal() {
   const [sizeRange, setSizeRange] = useState('512-4096');
   const [pattern, setPattern] = useState('record-{n}.json');
   const [prefix, setPrefix] = useState('');
+  const [presetId, setPresetId] = useState<string>('custom');
   const [busy, setBusy] = useState(false);
 
   const payloadBucket =
@@ -38,11 +45,12 @@ export function FakeDataModal() {
 
   useEffect(() => {
     if (!isOpen) return;
+    if (connectionStatus === 'connected') void refreshBuckets();
     const initial =
       payloadBucket ?? currentBucket ?? buckets[0]?.name ?? '';
     setSelectedBucket(initial);
     setPrefix(currentPrefix);
-  }, [isOpen, payloadBucket, currentBucket, currentPrefix, buckets]);
+  }, [isOpen, payloadBucket, currentBucket, currentPrefix, buckets, connectionStatus, refreshBuckets]);
 
   const onKindChange = (next: FakeDataKind) => {
     setKind(next);
@@ -51,24 +59,61 @@ export function FakeDataModal() {
     setSizeRange(def.defaultSizeRange);
   };
 
+  const applyPreset = (preset: FakeDataPreset) => {
+    setPresetId(preset.id);
+    setPrefix(preset.prefix);
+    if (preset.files.length === 1) {
+      const f = preset.files[0]!;
+      onKindChange(f.kind);
+      setPattern(f.pattern);
+      setCount(f.count);
+      setSizeRange(f.sizeRange);
+    }
+  };
+
   const generate = async () => {
     const provider = getActiveProvider();
     if (!provider || !selectedBucket) {
       toast.error('Select a target bucket');
       return;
     }
-    const { min, max } = parseSizeRange(sizeRange);
+    if (connectionStatus !== 'connected') {
+      toast.error('Wait for the provider connection before generating data');
+      return;
+    }
     setBusy(true);
     try {
-      for (let n = 1; n <= count; n++) {
-        const name = pattern.replace('{n}', String(n));
-        const file = createFakeFile(kind, n, name, min, max);
-        await provider.uploadObject(selectedBucket, prefix + name, file, {
-          contentType: file.type,
-        });
+      let uploaded = 0;
+      const preset = FAKE_DATA_PRESETS.find((p) => p.id === presetId);
+
+      if (preset && presetId !== 'custom') {
+        for (const spec of preset.files) {
+          const { min, max } = parseSizeRange(spec.sizeRange);
+          const basePrefix = prefix || preset.prefix;
+          for (let n = 1; n <= spec.count; n++) {
+            const name = spec.pattern.replace('{n}', String(n));
+            const file = createFakeFile(spec.kind, n, name, min, max);
+            const key = `${basePrefix}${spec.subpath ?? ''}${name}`;
+            await provider.uploadObject(selectedBucket, key, file, {
+              contentType: file.type,
+            });
+            uploaded++;
+          }
+        }
+      } else {
+        const { min, max } = parseSizeRange(sizeRange);
+        for (let n = 1; n <= count; n++) {
+          const name = pattern.replace('{n}', String(n));
+          const file = createFakeFile(kind, n, name, min, max);
+          await provider.uploadObject(selectedBucket, prefix + name, file, {
+            contentType: file.type,
+          });
+          uploaded++;
+        }
       }
+
       invalidateObjects();
-      toast.success(`Generated ${count} ${kind.toUpperCase()} object(s) in ${selectedBucket}`);
+      toast.success(`Generated ${uploaded} object(s) in ${selectedBucket}`);
       closeModal('fakeData');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Generation failed');
@@ -121,14 +166,54 @@ export function FakeDataModal() {
 
         <div>
           <label className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-muted)] mb-2 block">
+            Scenario preset
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
+            <button
+              type="button"
+              onClick={() => setPresetId('custom')}
+              className={`p-3 text-left border transition-colors ${
+                presetId === 'custom'
+                  ? 'border-[var(--accent)] bg-[var(--accent)]/10'
+                  : 'border-[var(--border)] bg-[var(--bg-base)] hover:border-[var(--accent)]/40'
+              }`}
+            >
+              <p className="text-xs font-semibold">Custom</p>
+              <p className="text-[10px] text-[var(--text-muted)] mt-0.5">Single type and pattern</p>
+            </button>
+            {FAKE_DATA_PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => applyPreset(preset)}
+                className={`p-3 text-left border transition-colors ${
+                  presetId === preset.id
+                    ? 'border-[var(--accent)] bg-[var(--accent)]/10'
+                    : 'border-[var(--border)] bg-[var(--bg-base)] hover:border-[var(--accent)]/40'
+                }`}
+              >
+                <p className="text-xs font-semibold">{preset.label}</p>
+                <p className="text-[10px] text-[var(--text-muted)] mt-0.5 leading-relaxed">
+                  {preset.description}
+                </p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-muted)] mb-2 block">
             Data type
           </label>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className={`grid grid-cols-1 sm:grid-cols-2 gap-2 ${presetId !== 'custom' ? 'opacity-50 pointer-events-none' : ''}`}>
             {FAKE_DATA_KINDS.map((k) => (
               <button
                 key={k.id}
                 type="button"
-                onClick={() => onKindChange(k.id)}
+                onClick={() => {
+                  setPresetId('custom');
+                  onKindChange(k.id);
+                }}
                 className={`p-3 text-left border transition-colors ${
                   kind === k.id
                     ? 'border-[var(--accent)] bg-[var(--accent)]/10'

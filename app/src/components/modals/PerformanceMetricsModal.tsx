@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { Activity, X } from 'lucide-react';
 import { useBuckets } from '../../hooks/useBuckets';
 import { usePerformanceMetrics, type OperationKind } from '../../hooks/usePerformanceMetrics';
@@ -30,35 +30,284 @@ const DIST_COLORS: Record<OperationKind, string> = {
   OTHER: 'var(--text-muted)',
 };
 
-function LineChart({ points }: { points: number[] }) {
-  const max = Math.max(...points, 1);
-  const w = 520;
-  const h = 160;
-  const coords = points
-    .map((p, i) => `${(i / Math.max(points.length - 1, 1)) * w},${h - (p / max) * (h - 8) - 4}`)
-    .join(' ');
+function niceCeil(value: number): number {
+  if (value <= 2) return 2;
+  if (value <= 5) return 5;
+  if (value <= 10) return 10;
+  const magnitude = 10 ** Math.floor(Math.log10(value));
+  const normalized = value / magnitude;
+  if (normalized <= 1) return magnitude;
+  if (normalized <= 2) return 2 * magnitude;
+  if (normalized <= 5) return 5 * magnitude;
+  return 10 * magnitude;
+}
+
+function windowAxisSeconds(range: TimeRange): number {
+  if (range === 'live') return 60;
+  if (range === '1h') return 60;
+  return 24;
+}
+
+function windowAxisUnit(range: TimeRange): string {
+  if (range === 'live') return 's';
+  if (range === '1h') return 'm';
+  return 'h';
+}
+
+function formatChartTime(index: number, pointCount: number, range: TimeRange): string {
+  const pct = index / Math.max(pointCount - 1, 1);
+  const axisMax = windowAxisSeconds(range);
+  const unit = windowAxisUnit(range);
+  const value = Math.round(axisMax * pct);
+  return `${value}${unit}`;
+}
+
+function svgPointFromClient(svg: SVGSVGElement, clientX: number, clientY: number) {
+  const pt = svg.createSVGPoint();
+  pt.x = clientX;
+  pt.y = clientY;
+  const matrix = svg.getScreenCTM();
+  if (!matrix) return null;
+  return pt.matrixTransform(matrix.inverse());
+}
+
+function clientPointFromSvg(svg: SVGSVGElement, x: number, y: number) {
+  const pt = svg.createSVGPoint();
+  pt.x = x;
+  pt.y = y;
+  const matrix = svg.getScreenCTM();
+  if (!matrix) return null;
+  return pt.matrixTransform(matrix);
+}
+
+function LineChart({
+  points,
+  range,
+  totalRequests,
+}: {
+  points: number[];
+  range: TimeRange;
+  totalRequests: number;
+}) {
+  const chartWrapRef = useRef<HTMLDivElement>(null);
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const [tooltipPos, setTooltipPos] = useState<{ left: number; top: number } | null>(null);
+
+  const w = 560;
+  const h = 200;
+  const pad = { top: 16, right: 16, bottom: 32, left: 40 };
+  const innerW = w - pad.left - pad.right;
+  const innerH = h - pad.top - pad.bottom;
+
+  const yMax = niceCeil(Math.max(...points, 1));
+  const axisMax = windowAxisSeconds(range);
+  const axisUnit = windowAxisUnit(range);
+
+  const coords = points.map((p, i) => {
+    const x = pad.left + (i / Math.max(points.length - 1, 1)) * innerW;
+    const y = pad.top + innerH - (p / yMax) * innerH;
+    return { x, y, value: p };
+  });
+
+  const linePath = coords.map((c, i) => `${i === 0 ? 'M' : 'L'}${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' ');
+  const areaPath = `${linePath} L ${(pad.left + innerW).toFixed(1)},${pad.top + innerH} L ${pad.left},${pad.top + innerH} Z`;
+
+  const yTicks = [0, 0.25, 0.5, 0.75, 1].map((pct) => ({
+    pct,
+    value: Math.round(yMax * pct),
+    y: pad.top + innerH - pct * innerH,
+  }));
+
+  const xTickCount = range === '24h' ? 5 : 7;
+  const xTicks = Array.from({ length: xTickCount }, (_, i) => {
+    const pct = i / (xTickCount - 1);
+    return {
+      pct,
+      label: String(Math.round(axisMax * pct)),
+      x: pad.left + pct * innerW,
+    };
+  });
+
+  const handleMouseMove = (event: MouseEvent<SVGSVGElement>) => {
+    const svg = event.currentTarget;
+    const wrap = chartWrapRef.current;
+    const svgPt = svgPointFromClient(svg, event.clientX, event.clientY);
+    if (!svgPt || !wrap) {
+      setHoverIndex(null);
+      setTooltipPos(null);
+      return;
+    }
+
+    const relX = svgPt.x;
+    if (relX < pad.left || relX > pad.left + innerW) {
+      setHoverIndex(null);
+      setTooltipPos(null);
+      return;
+    }
+
+    const idx = Math.round(((relX - pad.left) / innerW) * (points.length - 1));
+    const clamped = Math.max(0, Math.min(points.length - 1, idx));
+    setHoverIndex(clamped);
+
+    const point = coords[clamped];
+    const screen = clientPointFromSvg(svg, point.x, point.y);
+    if (!screen) {
+      setTooltipPos(null);
+      return;
+    }
+    const wrapRect = wrap.getBoundingClientRect();
+    setTooltipPos({
+      left: screen.x - wrapRect.left,
+      top: screen.y - wrapRect.top,
+    });
+  };
+
+  const clearHover = () => {
+    setHoverIndex(null);
+    setTooltipPos(null);
+  };
+
+  const hover = hoverIndex !== null ? coords[hoverIndex] : null;
+  const hoverRequests = hoverIndex !== null ? points[hoverIndex] : 0;
 
   return (
-    <div>
-      <div className="flex justify-between text-[9px] font-mono text-[var(--text-muted)] mb-1 px-1">
-        <span>{max} req</span>
-        <span>Activity over window</span>
-        <span>0</span>
+    <div className="border border-[var(--border)] bg-[var(--bg-base)] p-4">
+      <div className="flex items-center justify-between mb-3 gap-4">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-muted)]">
+          Activity over window
+        </p>
+        <p className="text-[10px] font-mono text-[var(--text-muted)]">
+          <span className="text-[var(--text-primary)] font-semibold">{totalRequests}</span> total requests
+        </p>
       </div>
-      <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-40">
-        {[0, 0.25, 0.5, 0.75, 1].map((pct) => (
-          <line
-            key={pct}
-            x1={0}
-            y1={h - pct * (h - 8) - 4}
-            x2={w}
-            y2={h - pct * (h - 8) - 4}
-            stroke="var(--border)"
-            strokeWidth="1"
+      <div className="relative" ref={chartWrapRef}>
+        <svg
+          viewBox={`0 0 ${w} ${h}`}
+          preserveAspectRatio="xMidYMid meet"
+          className="w-full h-[200px] cursor-crosshair block"
+          role="img"
+          aria-label="Requests over time"
+          onMouseMove={handleMouseMove}
+          onMouseLeave={clearHover}
+        >
+          <defs>
+            <linearGradient id="perf-area-fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.45" />
+              <stop offset="100%" stopColor="var(--accent)" stopOpacity="0.05" />
+            </linearGradient>
+          </defs>
+
+          {yTicks.map(({ pct, value, y }) => (
+            <g key={`y-${pct}`}>
+              <line
+                x1={pad.left}
+                y1={y}
+                x2={pad.left + innerW}
+                y2={y}
+                stroke="var(--border)"
+                strokeWidth="1"
+                opacity={pct === 0 ? 1 : 0.65}
+              />
+              <text
+                x={pad.left - 8}
+                y={y + 3}
+                textAnchor="end"
+                className="fill-[var(--text-muted)]"
+                style={{ fontSize: 9, fontFamily: 'var(--font-mono)' }}
+              >
+                {value}
+              </text>
+            </g>
+          ))}
+
+          {xTicks.map(({ pct, label, x }) => (
+            <g key={`x-${pct}`}>
+              <line
+                x1={x}
+                y1={pad.top}
+                x2={x}
+                y2={pad.top + innerH}
+                stroke="var(--border)"
+                strokeWidth="1"
+                opacity="0.35"
+              />
+              <text
+                x={x}
+                y={h - 10}
+                textAnchor="middle"
+                className="fill-[var(--text-muted)]"
+                style={{ fontSize: 9, fontFamily: 'var(--font-mono)' }}
+              >
+                {label}
+              </text>
+            </g>
+          ))}
+
+          <text
+            x={pad.left + innerW / 2}
+            y={h - 2}
+            textAnchor="middle"
+            className="fill-[var(--text-muted)]"
+            style={{ fontSize: 8, fontFamily: 'var(--font-mono)' }}
+          >
+            Time ({axisUnit})
+          </text>
+
+          <rect
+            x={pad.left}
+            y={pad.top}
+            width={innerW}
+            height={innerH}
+            fill="transparent"
+            pointerEvents="all"
           />
-        ))}
-        <polyline fill="none" stroke="var(--accent)" strokeWidth="2" points={coords} />
-      </svg>
+
+          <path d={areaPath} fill="url(#perf-area-fill)" pointerEvents="none" />
+          <path
+            d={linePath}
+            fill="none"
+            stroke="var(--accent)"
+            strokeWidth="2"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            pointerEvents="none"
+          />
+
+          {hover && hoverIndex !== null && (
+            <g pointerEvents="none">
+              <line
+                x1={hover.x}
+                y1={pad.top}
+                x2={hover.x}
+                y2={pad.top + innerH}
+                stroke="var(--accent)"
+                strokeWidth="1"
+                strokeDasharray="3 3"
+                opacity="0.7"
+              />
+              <circle cx={hover.x} cy={hover.y} r="4" fill="var(--accent)" stroke="var(--bg-base)" strokeWidth="2" />
+            </g>
+          )}
+        </svg>
+
+        {hover && hoverIndex !== null && tooltipPos && (
+          <div
+            className="pointer-events-none absolute z-10 px-2.5 py-1.5 border border-[var(--border)] bg-[var(--bg-surface)] shadow-lg text-[10px] font-mono whitespace-nowrap"
+            style={{
+              left: tooltipPos.left,
+              top: tooltipPos.top,
+              transform: 'translate(-50%, calc(-100% - 10px))',
+            }}
+          >
+            <p className="text-[var(--text-muted)]">
+              t = {formatChartTime(hoverIndex, points.length, range)}
+            </p>
+            <p className="text-[var(--text-primary)] font-semibold">
+              {hoverRequests} request{hoverRequests === 1 ? '' : 's'}
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -215,11 +464,10 @@ export function PerformanceMetricsModal() {
             </p>
           </div>
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
             <KpiCard
               label="Requests / sec"
               value={metrics.hasData ? metrics.requestsPerSec.toFixed(1) : '—'}
-              sub={metrics.hasData ? `${metrics.totalRequests} total` : undefined}
               trend={
                 metrics.hasData
                   ? `${metrics.rpsTrend >= 0 ? '+' : ''}${metrics.rpsTrend}%`
@@ -237,7 +485,6 @@ export function PerformanceMetricsModal() {
                   : undefined
               }
               trendUp={metrics.latencyTrend <= 0}
-              accent
             />
             <KpiCard
               label="Error Rate"
@@ -248,6 +495,16 @@ export function PerformanceMetricsModal() {
                   : undefined
               }
               danger
+            />
+            <KpiCard
+              label="Total Requests"
+              value={metrics.hasData ? String(metrics.totalRequests) : '—'}
+              sub={
+                metrics.hasData
+                  ? `${RANGE_LABEL[range]}${bucketFilter ? ` · ${bucketFilter}` : ''}`
+                  : undefined
+              }
+              accent
             />
             <KpiCard
               label="Active Streams"
@@ -262,7 +519,7 @@ export function PerformanceMetricsModal() {
               generate fake data to populate metrics.
             </p>
           ) : (
-            <LineChart points={metrics.timeline} />
+            <LineChart points={metrics.timeline} range={range} totalRequests={metrics.totalRequests} />
           )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

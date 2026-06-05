@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { ChevronDown, Download, GripHorizontal } from 'lucide-react';
 import { formatActivityLine, formatActivityStatus, formatActivityTarget } from '../../lib/formatActivityLog';
+import {
+  ACTIVITY_FILTERS,
+  activityFilterLabel,
+  matchesActivityFilter,
+} from '../../lib/activityOperation';
 import { formatTime } from '../../lib/formatDate';
 import { useActivityStore } from '../../store/activityStore';
 import { useUploadStore } from '../../store/uploadStore';
@@ -29,8 +34,7 @@ export function ActivityDrawer() {
   const activeCount = pendingApi + activeUploads;
 
   const filtered = entries.filter((e) => {
-    if (filter === 'success' && e.status !== 'success') return false;
-    if (filter === 'error' && e.status !== 'error') return false;
+    if (!matchesActivityFilter(e, filter)) return false;
     if (search.trim()) {
       const q = search.toLowerCase();
       const line = formatActivityLine(e).toLowerCase();
@@ -137,20 +141,20 @@ export function ActivityDrawer() {
         </div>
       </div>
 
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--border)] flex-wrap bg-[var(--bg-base)] shrink-0">
-        {(['all', 'success', 'error'] as const).map((f) => (
+      <div className="flex items-center gap-1 px-3 py-2 border-b border-[var(--border)] flex-wrap bg-[var(--bg-base)] shrink-0">
+        {ACTIVITY_FILTERS.map((f) => (
           <button
             key={f}
             type="button"
-            className={`px-2 py-0.5 text-[10px] uppercase tracking-wide ${
+            className={`px-2.5 py-1 text-[10px] uppercase tracking-wide transition-colors ${
               filter === f
-                ? 'bg-[var(--accent)]/10 text-[var(--accent)] border border-[var(--accent)]/30'
+                ? 'text-[var(--text-primary)] bg-[var(--bg-elevated)]'
                 : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
             }`}
             style={{ fontFamily: 'var(--font-mono)' }}
             onClick={() => setFilter(f)}
           >
-            {f}
+            {activityFilterLabel(f)}
           </button>
         ))}
         <input

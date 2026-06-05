@@ -1,33 +1,11 @@
 import { useMemo } from 'react';
 import { extractBucketFromEntry } from '../lib/activityBucket';
+import { classifyOperation, type OperationKind } from '../lib/activityOperation';
 import type { ActivityEntry } from '../store/activityStore';
 import { useActivityStore } from '../store/activityStore';
 
-export type OperationKind = 'GET' | 'PUT' | 'LIST' | 'DELETE' | 'OTHER';
-
-const METHOD_KIND: Record<string, OperationKind> = {
-  getObject: 'GET',
-  getObjectMetadata: 'GET',
-  getObjectUrl: 'GET',
-  uploadObject: 'PUT',
-  createBucket: 'PUT',
-  setCorsRules: 'PUT',
-  updateMetadata: 'PUT',
-  copyObject: 'PUT',
-  moveObject: 'PUT',
-  listObjects: 'LIST',
-  listBuckets: 'LIST',
-  listVersions: 'LIST',
-  getCorsRules: 'LIST',
-  getBucketStats: 'LIST',
-  deleteObject: 'DELETE',
-  deleteBucket: 'DELETE',
-  deleteVersion: 'DELETE',
-};
-
-export function classifyOperation(method: string): OperationKind {
-  return METHOD_KIND[method] ?? 'OTHER';
-}
+export type { OperationKind } from '../lib/activityOperation';
+export { classifyOperation } from '../lib/activityOperation';
 
 function entriesInWindow(entries: ActivityEntry[], startMs: number, endMs: number) {
   return entries.filter((e) => {

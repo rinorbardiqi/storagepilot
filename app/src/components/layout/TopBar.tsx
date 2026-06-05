@@ -1,4 +1,6 @@
-import { Search, Settings } from 'lucide-react';
+import { Github, Search, Settings } from 'lucide-react';
+
+const GITHUB_REPO_URL = 'https://github.com/rinorbardiqi/storagepilot';
 import { useConnectionStore } from '../../store/connectionStore';
 import { useModalStore } from '../../store/modalStore';
 import { useUiStore } from '../../store/uiStore';
@@ -47,6 +49,16 @@ export function TopBar() {
             Dev Mode
           </span>
         )}
+        <a
+          href={GITHUB_REPO_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="p-0 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+          aria-label="GitHub repository"
+          title="View on GitHub"
+        >
+          <Github size={14} strokeWidth={1.75} />
+        </a>
         <button
           type="button"
           className="p-0 text-[var(--text-muted)] hover:text-[var(--text-primary)]"

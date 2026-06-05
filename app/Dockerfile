@@ -1,10 +1,10 @@
 # Stage 1 — build (not included in final image)
 FROM node:22-alpine AS builder
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci
+COPY package.json pnpm-lock.yaml ./
+RUN corepack enable && pnpm install --frozen-lockfile
 COPY . .
-RUN npm run build
+RUN pnpm run build
 
 # Stage 2 — serve (alpine-slim: ~26 packages vs 200+ on nginx:bookworm)
 FROM nginx:alpine-slim

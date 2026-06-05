@@ -5,14 +5,14 @@ Thanks for your interest in contributing!
 ## Development setup
 
 1. Fork and clone the repo
-2. `cd app && npm install`
+2. `cd app && pnpm install`
 3. Start emulators: `docker compose up fake-gcs minio azurite -d`
-4. Run the dev server: `npm run dev`
+4. Run the dev server: `pnpm run dev`
 
 ## Code style
 
 - TypeScript strict mode
-- ESLint + Prettier (run `npm run lint` before opening a PR)
+- ESLint + Prettier (run `pnpm run lint` before opening a PR)
 - Match existing patterns — read `docs/` for architecture and provider conventions
 
 ## Pull requests

@@ -11,7 +11,9 @@ import {
 import { buildPathFormats, type PathFormats } from './pathFormatters';
 import { resolveApiUrl } from './resolveApiUrl';
 
-export type SnippetLanguage = 'go' | 'python' | 'node' | 'java' | 'cli';
+import { operationSnippet } from './snippetOperations';
+export type { SnippetLanguage, SnippetOperation } from './snippetTypes';
+import type { SnippetLanguage, SnippetOperation } from './snippetTypes';
 
 export const SNIPPET_PLACEHOLDER_BUCKET = 'my-bucket';
 export const SNIPPET_PLACEHOLDER_KEY = 'path/to/object';
@@ -459,7 +461,11 @@ export function generateSnippet(
   bucket: string,
   key: string,
   paths: PathFormats,
+  operation: SnippetOperation = 'download',
 ): string {
+  const opSnippet = operationSnippet(operation, language, provider, profile, bucket, key, paths);
+  if (opSnippet) return opSnippet;
+
   switch (provider) {
     case 'gcs':
       return gcsSnippets(language, profile, bucket, key, paths);
@@ -476,7 +482,8 @@ export function generateSnippetForProfile(
   profile: ConnectionProfile,
   bucket: string,
   key: string,
+  operation: SnippetOperation = 'download',
 ): string {
   const paths = buildPathFormats(profile.type, bucket, key, profileBaseUrl(profile));
-  return generateSnippet(language, profile.type, profile, bucket, key, paths);
+  return generateSnippet(language, profile.type, profile, bucket, key, paths, operation);
 }

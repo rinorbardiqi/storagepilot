@@ -146,6 +146,62 @@ export function createFakeFile(
   }
 }
 
+export interface FakeDataPresetFile {
+  kind: FakeDataKind;
+  pattern: string;
+  count: number;
+  sizeRange: string;
+  subpath?: string;
+}
+
+export interface FakeDataPreset {
+  id: string;
+  label: string;
+  description: string;
+  prefix: string;
+  files: FakeDataPresetFile[];
+}
+
+export const FAKE_DATA_PRESETS: FakeDataPreset[] = [
+  {
+    id: 'json-batch',
+    label: 'JSON batch',
+    description: 'Flat JSON records for API fixture testing',
+    prefix: 'fixtures/json/',
+    files: [{ kind: 'json', pattern: 'record-{n}.json', count: 20, sizeRange: '512-4096' }],
+  },
+  {
+    id: 'ecommerce',
+    label: 'E-commerce catalog',
+    description: 'Products CSV plus sample product images',
+    prefix: 'catalog/',
+    files: [
+      { kind: 'csv', pattern: 'products-{n}.csv', count: 3, sizeRange: '2048-8192' },
+      { kind: 'image', pattern: 'product-{n}.svg', count: 12, sizeRange: '800-2400', subpath: 'images/' },
+      { kind: 'json', pattern: 'inventory-{n}.json', count: 5, sizeRange: '1024-4096', subpath: 'meta/' },
+    ],
+  },
+  {
+    id: 'ml-dataset',
+    label: 'ML dataset layout',
+    description: 'Train/test split with labels and binary features',
+    prefix: 'datasets/ml-v1/',
+    files: [
+      { kind: 'csv', pattern: 'train-{n}.csv', count: 8, sizeRange: '4096-16384', subpath: 'train/' },
+      { kind: 'csv', pattern: 'test-{n}.csv', count: 2, sizeRange: '2048-8192', subpath: 'test/' },
+      { kind: 'binary', pattern: 'weights-{n}.bin', count: 4, sizeRange: '8192-32768', subpath: 'models/' },
+      { kind: 'json', pattern: 'labels-{n}.json', count: 2, sizeRange: '512-2048', subpath: 'labels/' },
+    ],
+  },
+  {
+    id: 'logs',
+    label: 'App logs',
+    description: 'Rotated plain-text logs for search and preview tests',
+    prefix: 'logs/',
+    files: [{ kind: 'text', pattern: 'app-{n}.log', count: 15, sizeRange: '4096-16384' }],
+  },
+];
+
 export function parseSizeRange(range: string): { min: number; max: number } {
   const [minStr, maxStr] = range.split('-');
   const min = Math.max(1, Number(minStr) || 1024);

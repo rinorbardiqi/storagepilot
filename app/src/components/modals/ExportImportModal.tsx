@@ -1,22 +1,44 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useConnectionStore } from '../../store/connectionStore';
 import { useModalStore } from '../../store/modalStore';
 import { useBuckets } from '../../hooks/useBuckets';
 import { useToast } from '../../hooks/useToast';
+import {
+  createSnapshotManifest,
+  objectManifestKey,
+  parseSnapshotManifest,
+  SNAPSHOT_MANIFEST_FILE,
+  snapshotManifestToJson,
+  type SnapshotBucketEntry,
+  type SnapshotObjectEntry,
+} from '../../lib/snapshotManifest';
 import { downloadAsZip } from '../../lib/zip';
 import { Button } from '../shared/Button';
 import { Modal } from '../shared/Modal';
 
 export function ExportImportModal() {
-  const isOpen = useModalStore((s) => Boolean(s.active.exportImport));
+  const active = useModalStore((s) => s.active.exportImport);
+  const isOpen = Boolean(active);
+  const payload = typeof active === 'object' ? active : undefined;
   const closeModal = useModalStore((s) => s.closeModal);
   const getActiveProvider = useConnectionStore((s) => s.getActiveProvider);
+  const activeProfileId = useConnectionStore((s) => s.activeProfileId);
+  const profiles = useConnectionStore((s) => s.profiles);
+  const profile = profiles.find((p) => p.id === activeProfileId);
   const { buckets } = useBuckets();
   const toast = useToast();
   const [tab, setTab] = useState<'export' | 'import'>('export');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [importFiles, setImportFiles] = useState<Array<{ path: string; blob: Blob }>>([]);
+  const [importManifest, setImportManifest] = useState<ReturnType<typeof parseSnapshotManifest>>(null);
+  const [progress, setProgress] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      setTab(payload?.tab ?? 'export');
+    }
+  }, [isOpen, payload?.tab]);
 
   const toggle = (name: string) => {
     setSelected((prev) => {
@@ -29,29 +51,59 @@ export function ExportImportModal() {
 
   const exportBuckets = async () => {
     const provider = getActiveProvider();
-    if (!provider || selected.size === 0) return;
+    if (!provider || !profile || !activeProfileId || selected.size === 0) return;
     setBusy(true);
+    setProgress('');
     try {
       const files: Array<{ key: string; blob: Blob }> = [];
-      for (const bucket of selected) {
+      const bucketEntries: SnapshotBucketEntry[] = [];
+
+      for (const bucketName of selected) {
+        const objects: SnapshotObjectEntry[] = [];
         let token: string | undefined;
+        let listed = 0;
         do {
-          const page = await provider.listObjects(bucket, { maxResults: 200, pageToken: token });
+          const page = await provider.listObjects(bucketName, { maxResults: 200, pageToken: token });
           for (const obj of page.objects) {
             if (obj.isFolder) continue;
-            const blob = await provider.getObject(bucket, obj.key);
-            files.push({ key: `${bucket}/${obj.key}`, blob });
+            listed++;
+            setProgress(`Exporting ${bucketName} (${listed})…`);
+            const meta = await provider.getObjectMetadata(bucketName, obj.key).catch(() => null);
+            const blob = await provider.getObject(bucketName, obj.key);
+            const zipPath = `${bucketName}/${obj.key}`;
+            files.push({ key: zipPath, blob });
+            objects.push({
+              key: obj.key,
+              contentType: meta?.contentType ?? obj.contentType ?? (blob.type || 'application/octet-stream'),
+              customMetadata: meta?.customMetadata,
+            });
           }
           token = page.nextPageToken;
         } while (token);
+
+        let cors;
+        try {
+          cors = await provider.getCorsRules(bucketName);
+        } catch {
+          cors = undefined;
+        }
+        bucketEntries.push({ name: bucketName, cors, objects });
       }
-      await downloadAsZip(files, 'storagepilot-export.zip');
-      toast.success(`Exported ${files.length} object(s)`);
+
+      const manifest = createSnapshotManifest(
+        provider.type,
+        activeProfileId,
+        profile.name,
+        bucketEntries,
+      );
+      await downloadAsZip(files, 'storagepilot-snapshot.zip', snapshotManifestToJson(manifest));
+      toast.success(`Exported snapshot with ${files.length} object(s)`);
       closeModal('exportImport');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Export failed');
     } finally {
       setBusy(false);
+      setProgress('');
     }
   };
 
@@ -59,13 +111,19 @@ export function ExportImportModal() {
     const JSZip = (await import('jszip')).default;
     const zip = await JSZip.loadAsync(file);
     const entries: Array<{ path: string; blob: Blob }> = [];
+    let manifestRaw: string | null = null;
+
     for (const [path, entry] of Object.entries(zip.files)) {
-      if (!entry.dir) {
-        const blob = await entry.async('blob');
-        entries.push({ path, blob });
+      if (entry.dir) continue;
+      if (path === SNAPSHOT_MANIFEST_FILE) {
+        manifestRaw = await entry.async('string');
+        continue;
       }
+      const blob = await entry.async('blob');
+      entries.push({ path, blob });
     }
     setImportFiles(entries);
+    setImportManifest(manifestRaw ? parseSnapshotManifest(manifestRaw) : null);
   };
 
   const confirmImport = async () => {
@@ -73,23 +131,74 @@ export function ExportImportModal() {
     if (!provider || importFiles.length === 0) return;
     setBusy(true);
     try {
+      const metaByPath = new Map<string, SnapshotObjectEntry>();
+      if (importManifest) {
+        for (const bucket of importManifest.buckets) {
+          for (const obj of bucket.objects) {
+            metaByPath.set(objectManifestKey(bucket.name, obj.key), obj);
+          }
+        }
+      }
+
+      const bucketNames = new Set<string>();
+      for (const { path } of importFiles) {
+        const slash = path.indexOf('/');
+        if (slash > 0) bucketNames.add(path.slice(0, slash));
+      }
+      if (importManifest) {
+        for (const b of importManifest.buckets) bucketNames.add(b.name);
+      }
+
+      const existing = new Set((await provider.listBuckets()).map((b) => b.name));
+      for (const name of bucketNames) {
+        if (!existing.has(name)) {
+          await provider.createBucket(name);
+        }
+      }
+
+      let done = 0;
       for (const { path, blob } of importFiles) {
+        done++;
+        setProgress(`Importing ${done}/${importFiles.length}…`);
         const slash = path.indexOf('/');
         if (slash === -1) continue;
         const bucket = path.slice(0, slash);
         const key = path.slice(slash + 1);
+        const meta = metaByPath.get(path);
         const file = new File([blob], key.split('/').pop() ?? key, {
-          type: blob.type || 'application/octet-stream',
+          type: meta?.contentType ?? (blob.type || 'application/octet-stream'),
         });
-        await provider.uploadObject(bucket, key, file);
+        await provider.uploadObject(bucket, key, file, {
+          contentType: meta?.contentType,
+          customMetadata: meta?.customMetadata,
+        });
       }
-      toast.success(`Imported ${importFiles.length} object(s)`);
+
+      if (importManifest) {
+        for (const bucket of importManifest.buckets) {
+          if (bucket.cors?.length) {
+            try {
+              await provider.setCorsRules(bucket.name, bucket.cors);
+            } catch {
+              /* emulator may not support CORS write */
+            }
+          }
+        }
+      }
+
+      toast.success(
+        importManifest
+          ? `Imported snapshot (${importManifest.profileName}, ${importFiles.length} objects)`
+          : `Imported ${importFiles.length} object(s)`,
+      );
       closeModal('exportImport');
       setImportFiles([]);
+      setImportManifest(null);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Import failed');
     } finally {
       setBusy(false);
+      setProgress('');
     }
   };
 
@@ -97,12 +206,12 @@ export function ExportImportModal() {
     <Modal
       isOpen={isOpen}
       onClose={() => closeModal('exportImport')}
-      title="Export / import emulator state"
+      title="Snapshot manager"
       size="lg"
       footer={
         tab === 'export' ? (
           <Button variant="primary" onClick={() => void exportBuckets()} disabled={selected.size === 0 || busy}>
-            {busy ? 'Exporting…' : `Export ${selected.size} bucket(s)`}
+            {busy ? progress || 'Exporting…' : `Export ${selected.size} bucket(s)`}
           </Button>
         ) : (
           <Button
@@ -110,11 +219,15 @@ export function ExportImportModal() {
             onClick={() => void confirmImport()}
             disabled={importFiles.length === 0 || busy}
           >
-            {busy ? 'Importing…' : `Import ${importFiles.length} file(s)`}
+            {busy ? progress || 'Importing…' : `Import ${importFiles.length} file(s)`}
           </Button>
         )
       }
     >
+      <p className="text-xs text-[var(--text-muted)] mb-4">
+        Snapshots include a <code className="font-mono">manifest.json</code> with bucket configs, CORS
+        rules, and object metadata. Legacy zip exports without a manifest still import as object data only.
+      </p>
       <div className="flex gap-1 mb-4 border-b border-[var(--border)]">
         {(['export', 'import'] as const).map((t) => (
           <button
@@ -150,6 +263,12 @@ export function ExportImportModal() {
               if (f) void onImportZip(f);
             }}
           />
+          {importManifest && (
+            <p className="text-xs text-[var(--success)] font-mono">
+              Manifest v{importManifest.version} · {importManifest.provider} ·{' '}
+              {importManifest.buckets.length} bucket(s)
+            </p>
+          )}
           {importFiles.length > 0 && (
             <ul className="text-xs font-mono max-h-48 overflow-y-auto border border-[var(--border)] p-2">
               {importFiles.slice(0, 50).map((f) => (

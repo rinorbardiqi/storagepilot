@@ -2,6 +2,14 @@ server {
   listen 80;
   resolver 127.0.0.11 valid=10s ipv6=off;
 
+  # Vite emits .mjs assets; default nginx mime.types omit them, which breaks dynamic import().
+  location ~* \.mjs$ {
+    root /usr/share/nginx/html;
+    default_type application/javascript;
+    add_header Cache-Control "public, immutable";
+    try_files $uri =404;
+  }
+
   location / {
     root /usr/share/nginx/html;
     try_files $uri $uri/ /index.html;
