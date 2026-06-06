@@ -39,13 +39,12 @@ ENV NGINX_ENTRYPOINT_QUIET_LOGS=1
 ENV STORAGEPILOT_MODE=bundled
 ENV ENABLED_PROVIDERS=gcs,s3,azure
 RUN apk upgrade --no-cache \
-    && apk add --no-cache tini wget libstdc++ libgcc \
+    && apk add --no-cache tini wget nodejs \
     && sed -i 's/error_log  \/var\/log\/nginx\/error.log notice;/error_log  \/dev\/stderr warn;/' /etc/nginx/nginx.conf \
     && rm -rf /var/cache/apk/*
 COPY --from=fake-gcs /bin/fake-gcs-server /usr/local/bin/fake-gcs-server
 COPY --from=minio-bin /usr/bin/minio /usr/local/bin/minio
-# Alpine-compatible Node + Azurite app tree from the official image (symlink target at /opt/azurite).
-COPY --from=node:22-alpine /usr/local/bin/node /usr/local/bin/node
+# Azurite app tree from the official image (/opt/azurite; smaller than npm install -g).
 COPY --from=azurite-bin /opt/azurite /opt/azurite
 RUN printf '%s\n' '#!/bin/sh' 'exec node /opt/azurite/dist/src/blob/main.js "$@"' \
     > /usr/local/bin/azurite-blob \

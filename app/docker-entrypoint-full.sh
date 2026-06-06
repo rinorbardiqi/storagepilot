@@ -73,6 +73,7 @@ fi
 
 if [ "$S3_ENABLED" = "1" ]; then
   mkdir -p /data/s3
+  MINIO_API_CORS_ALLOW_ORIGIN="${MINIO_API_CORS_ALLOW_ORIGIN:-*}" \
   MINIO_ROOT_USER="$MINIO_ROOT_USER" MINIO_ROOT_PASSWORD="$MINIO_ROOT_PASSWORD" \
     minio server /data/s3 --address ":9000" --console-address ":9001" &
   PIDS="$PIDS $!"
@@ -91,10 +92,6 @@ if [ "$S3_ENABLED" = "1" ]; then
     exit 1
   fi
 
-  if command -v mc >/dev/null 2>&1; then
-    mc alias set local http://127.0.0.1:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null 2>&1 || true
-    mc admin config set local api cors_allow_origin='*' >/dev/null 2>&1 || true
-  fi
 fi
 
 if [ "$AZURE_ENABLED" = "1" ]; then

@@ -314,7 +314,7 @@ export function shikiLanguageFor(key: string, contentType: string): string {
     rs: 'rust',
     java: 'java',
     kt: 'kotlin',
-    swift: 'swift',
+    swift: 'plaintext',
     cs: 'csharp',
     php: 'php',
     sh: 'shell',
