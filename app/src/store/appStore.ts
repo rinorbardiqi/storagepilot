@@ -41,15 +41,29 @@ export const useAppStore = create<AppState>()((set) => ({
   objectsRevision: 0,
 
   setCurrentBucket: (bucket) =>
-    set({
-      currentBucket: bucket,
-      currentPrefix: '',
-      browserSearchQuery: '',
-      filterContentType: null,
+    set((s) => {
+      if (
+        s.currentBucket === bucket &&
+        s.currentPrefix === '' &&
+        s.browserSearchQuery === '' &&
+        s.filterContentType === null
+      ) {
+        return s;
+      }
+      return {
+        currentBucket: bucket,
+        currentPrefix: '',
+        browserSearchQuery: '',
+        filterContentType: null,
+      };
     }),
 
   setCurrentPrefix: (prefix) =>
-    set({ currentPrefix: prefix, browserSearchQuery: '' }),
+    set((s) =>
+      s.currentPrefix === prefix && s.browserSearchQuery === ''
+        ? s
+        : { currentPrefix: prefix, browserSearchQuery: '' },
+    ),
 
   navigateInto: (segment) =>
     set((s) => ({
@@ -67,7 +81,7 @@ export const useAppStore = create<AppState>()((set) => ({
       };
     }),
 
-  setViewMode: (viewMode) => set({ viewMode }),
+  setViewMode: (viewMode) => set((s) => (s.viewMode === viewMode ? s : { viewMode })),
   setSort: (sortField, sortDir) => set({ sortField, sortDir }),
   toggleSort: (field) =>
     set((s) =>
@@ -75,7 +89,8 @@ export const useAppStore = create<AppState>()((set) => ({
         ? { sortDir: s.sortDir === 'asc' ? 'desc' : 'asc' }
         : { sortField: field, sortDir: 'asc' },
     ),
-  setSearchQuery: (searchQuery) => set({ searchQuery }),
+  setSearchQuery: (searchQuery) =>
+    set((s) => (s.searchQuery === searchQuery ? s : { searchQuery })),
   setBrowserSearchQuery: (browserSearchQuery) => set({ browserSearchQuery }),
   setFilterContentType: (filterContentType) => set({ filterContentType }),
   resetFilters: () =>

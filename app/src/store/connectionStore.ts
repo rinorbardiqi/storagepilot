@@ -21,7 +21,7 @@ interface ConnectionState {
   removeProfile: (id: string) => void;
   setActiveProfile: (id: string) => void;
   setStatus: (id: string, status: ConnectionStatus) => void;
-  testConnection: (id: string) => Promise<boolean>;
+  testConnection: (id: string, options?: { force?: boolean }) => Promise<boolean>;
 }
 
 const DEFAULT_PROFILES: ConnectionProfile[] = buildDefaultProfiles();
@@ -44,6 +44,8 @@ function getCachedProvider(profile: ConnectionProfile): StorageProvider {
 function invalidateProvider(id: string): void {
   providerCache.delete(id);
 }
+
+const testInFlight = new Map<string, Promise<boolean>>();
 
 export const useConnectionStore = create<ConnectionState>()(
   persist(
@@ -69,9 +71,17 @@ export const useConnectionStore = create<ConnectionState>()(
 
       updateProfile: (id, updates) => {
         invalidateProvider(id);
-        set((s) => ({
-          profiles: s.profiles.map((p) => (p.id === id ? { ...p, ...updates } : p)),
-        }));
+        set((s) => {
+          const nextStatus = { ...s.connectionStatus };
+          const nextErrors = { ...s.connectionErrors };
+          delete nextStatus[id];
+          delete nextErrors[id];
+          return {
+            profiles: s.profiles.map((p) => (p.id === id ? { ...p, ...updates } : p)),
+            connectionStatus: nextStatus,
+            connectionErrors: nextErrors,
+          };
+        });
       },
 
       removeProfile: (id) => {
@@ -103,7 +113,8 @@ export const useConnectionStore = create<ConnectionState>()(
         });
       },
 
-      setActiveProfile: (id) => set({ activeProfileId: id }),
+      setActiveProfile: (id) =>
+        set((s) => (s.activeProfileId === id ? s : { activeProfileId: id })),
 
       setStatus: (id, status) =>
         set((s) => {
@@ -121,25 +132,41 @@ export const useConnectionStore = create<ConnectionState>()(
           };
         }),
 
-      testConnection: async (id) => {
-        const { profiles, setStatus } = get();
+      testConnection: async (id, options) => {
+        const { profiles, setStatus, connectionStatus } = get();
         const profile = profiles.find((p) => p.id === id);
         if (!profile) return false;
-        // Invalidate cache so we test with a fresh client (picks up config changes).
-        invalidateProvider(id);
-        setStatus(id, 'checking');
+        if (!options?.force && connectionStatus[id] === 'connected') return true;
+
+        const inFlight = testInFlight.get(id);
+        if (inFlight) return inFlight;
+
+        if (connectionStatus[id] === 'checking') return false;
+
+        const run = (async () => {
+          // Invalidate cache so we test with a fresh client (picks up config changes).
+          invalidateProvider(id);
+          setStatus(id, 'checking');
+          try {
+            const provider = getCachedProvider(profile);
+            const ok = await provider.testConnection();
+            setStatus(id, ok ? 'connected' : 'disconnected');
+            return ok;
+          } catch (err) {
+            const message = err instanceof Error ? err.message : 'Connection failed';
+            setStatus(id, 'disconnected');
+            set((s) => ({
+              connectionErrors: { ...s.connectionErrors, [id]: message },
+            }));
+            return false;
+          }
+        })();
+
+        testInFlight.set(id, run);
         try {
-          const provider = getCachedProvider(profile);
-          const ok = await provider.testConnection();
-          setStatus(id, ok ? 'connected' : 'disconnected');
-          return ok;
-        } catch (err) {
-          const message = err instanceof Error ? err.message : 'Connection failed';
-          setStatus(id, 'disconnected');
-          set((s) => ({
-            connectionErrors: { ...s.connectionErrors, [id]: message },
-          }));
-          return false;
+          return await run;
+        } finally {
+          if (testInFlight.get(id) === run) testInFlight.delete(id);
         }
       },
     }),

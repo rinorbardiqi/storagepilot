@@ -1,5 +1,5 @@
-# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
-# Runs Vite dev server with hot reload instead of the nginx production image.
+# Usage: docker compose -f docker-compose.stack.yml -f docker-compose.dev.yml up
+# Runs Vite dev server with hot reload against separate emulator containers.
 
 services:
   storagepilot:

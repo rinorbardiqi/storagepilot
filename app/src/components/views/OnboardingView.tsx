@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Database, Terminal } from 'lucide-react';
 import type { ProviderType } from '../../api/types';
+import { useSetupManifest } from '../../hooks/useSetupManifest';
 import {
-  ALL_PROVIDER_TYPES,
   applyOnboardingSources,
   toggleProviderSelection,
 } from '../../lib/onboarding';
+import { providersKey } from '../../lib/setupManifest';
 import { providerEndpointHint } from '../../lib/providerAccent';
 import { usePreferencesStore } from '../../store/preferencesStore';
 import { ProviderLogo } from '../shared/ProviderLogo';
@@ -37,12 +38,18 @@ const SOURCES: Array<{
   },
 ];
 
-function OnboardingStep1({ onContinue }: { onContinue: () => void }) {
+function OnboardingStep1({
+  onContinue,
+  onSkip,
+}: {
+  onContinue: () => void;
+  onSkip: () => void;
+}) {
   return (
     <OnboardingLayout
       step={1}
       onContinue={onContinue}
-      onSkip={() => applyOnboardingSources(ALL_PROVIDER_TYPES)}
+      onSkip={onSkip}
       showBack={false}
       continueLabel="Get Started"
       footerHint="Press Enter to continue"
@@ -54,8 +61,7 @@ function OnboardingStep1({ onContinue }: { onContinue: () => void }) {
           </h1>
           <p className="text-lg text-[var(--text-muted)] leading-relaxed">
             StoragePilot is a unified file browser for GCS, S3, and Azure emulators running on your
-            machine. On the next step you can enable <strong className="text-[var(--text-primary)]">one,
-            two, or all three</strong> backends at once.
+            machine. On the next step you connect to the backends enabled in your container.
           </p>
         </div>
 
@@ -74,29 +80,57 @@ function OnboardingStep1({ onContinue }: { onContinue: () => void }) {
           ))}
         </div>
 
-        <div className="flex items-start gap-3 p-4 border border-[var(--border)] bg-[var(--bg-surface)] text-sm text-[var(--text-muted)]">
-          <Terminal size={16} className="text-[var(--accent)] shrink-0 mt-0.5" />
-          <p>
-            Run <code className="font-mono text-[var(--text-primary)]">docker compose up</code> to
-            start the UI and all three emulators together.
-          </p>
+        <div className="flex flex-col gap-3">
+          <div className="flex items-start gap-3 p-4 border border-[var(--border)] bg-[var(--bg-surface)] text-sm text-[var(--text-muted)]">
+            <Terminal size={16} className="text-[var(--accent)] shrink-0 mt-0.5" />
+            <p>
+              Run the bundled image with{' '}
+              <code className="font-mono text-[var(--text-primary)]">rinorbardiqi/storagepilot:full</code>
+              . Choose providers at start with{' '}
+              <code className="font-mono text-[var(--text-primary)]">ENABLED_PROVIDERS</code>:
+            </p>
+          </div>
+          <pre className="p-3 border border-[var(--border)] bg-[var(--bg-base)] text-[10px] font-mono text-[var(--text-muted)] overflow-x-auto">
+{`docker run -d -p 3000:80 -p 9000:9000 \\
+  -v storagepilot-data:/data \\
+  rinorbardiqi/storagepilot:full
+
+# S3 only:
+docker run -d -p 3000:80 -p 9000:9000 \\
+  -e ENABLED_PROVIDERS=s3 \\
+  -v storagepilot-data:/data \\
+  rinorbardiqi/storagepilot:full`}
+          </pre>
         </div>
       </div>
     </OnboardingLayout>
   );
 }
 
-function OnboardingStep2({ onBack }: { onBack: () => void }) {
-  const enabledProviders = usePreferencesStore((s) => s.enabledProviders);
+function OnboardingStep2({
+  onBack,
+  availableProviders,
+  manifest,
+}: {
+  onBack: () => void;
+  availableProviders: ProviderType[];
+  manifest: ReturnType<typeof useSetupManifest>['manifest'];
+}) {
   const setEnabledProviders = usePreferencesStore((s) => s.setEnabledProviders);
-  const [selected, setSelected] = useState<ProviderType[]>(enabledProviders);
+  const visibleSources = useMemo(
+    () => SOURCES.filter((s) => availableProviders.includes(s.type)),
+    [availableProviders],
+  );
+  const [selected, setSelected] = useState<ProviderType[]>(availableProviders);
+  const availableKey = providersKey(availableProviders);
 
   useEffect(() => {
-    setEnabledProviders(selected);
-  }, [selected, setEnabledProviders]);
+    setSelected(availableProviders);
+    setEnabledProviders(availableProviders);
+  }, [availableKey, setEnabledProviders]);
 
-  const finish = () => applyOnboardingSources(selected);
-  const allSelected = selected.length === SOURCES.length;
+  const finish = () => applyOnboardingSources(selected, manifest);
+  const allSelected = selected.length === visibleSources.length;
 
   const toggle = (type: ProviderType) => {
     setSelected((current) => toggleProviderSelection(current, type));
@@ -107,10 +141,10 @@ function OnboardingStep2({ onBack }: { onBack: () => void }) {
       step={2}
       onBack={onBack}
       onContinue={finish}
-      onSkip={() => applyOnboardingSources(selected)}
+      onSkip={finish}
       continueLabel="Connect"
       continueDisabled={selected.length === 0}
-      footerHint="Select one or more backends, then press Enter"
+      footerHint="Select backends running in your container, then press Enter"
     >
       <div className="max-w-3xl w-full px-8 flex flex-col gap-8">
         <div className="text-center flex flex-col gap-2">
@@ -120,26 +154,33 @@ function OnboardingStep2({ onBack }: { onBack: () => void }) {
           </div>
           <h2 className="text-3xl font-semibold text-[var(--text-primary)]">Choose your storage</h2>
           <p className="text-[var(--text-muted)] max-w-lg mx-auto">
-            Pick any combination — a single provider, two, or all three. Selected backends appear in
-            the sidebar and you can switch between them anytime.
+            {manifest
+              ? 'These backends are running in your container. Select which ones to use in the sidebar.'
+              : 'Pick any combination — a single provider, two, or all three.'}
           </p>
         </div>
 
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs font-mono text-[var(--text-muted)]">
-            {selected.length} of {SOURCES.length} selected
+            {selected.length} of {visibleSources.length} selected
           </p>
-          <button
-            type="button"
-            onClick={() => setSelected(allSelected ? [SOURCES[0]!.type] : ALL_PROVIDER_TYPES)}
-            className="text-[10px] font-semibold uppercase tracking-wider text-[var(--accent)] hover:underline"
-          >
-            {allSelected ? 'Select one only' : 'Select all'}
-          </button>
+          {visibleSources.length > 1 && (
+            <button
+              type="button"
+              onClick={() =>
+                setSelected(
+                  allSelected ? [visibleSources[0]!.type] : availableProviders,
+                )
+              }
+              className="text-[10px] font-semibold uppercase tracking-wider text-[var(--accent)] hover:underline"
+            >
+              {allSelected ? 'Select one only' : 'Select all'}
+            </button>
+          )}
         </div>
 
         <div className="flex flex-col gap-3" role="group" aria-label="Storage backends">
-          {SOURCES.map(({ type, title, emulator, endpoint }) => {
+          {visibleSources.map(({ type, title, emulator, endpoint }) => {
             const active = selected.includes(type);
             return (
               <button
@@ -180,7 +221,8 @@ function OnboardingStep2({ onBack }: { onBack: () => void }) {
         </div>
 
         <p className="text-xs text-center text-[var(--text-muted)]">
-          At least one backend must stay selected. Change this later from connection settings.
+          To add more backends, restart the container with a broader{' '}
+          <code className="font-mono">ENABLED_PROVIDERS</code> value.
         </p>
       </div>
     </OnboardingLayout>
@@ -190,25 +232,63 @@ function OnboardingStep2({ onBack }: { onBack: () => void }) {
 export function OnboardingView() {
   const step = usePreferencesStore((s) => s.onboardingStep);
   const setStep = usePreferencesStore((s) => s.setOnboardingStep);
+  const { manifest, availableProviders, loading } = useSetupManifest();
+  const availableKey = providersKey(availableProviders);
+  const manifestKey = manifest?.enabledProviders?.length
+    ? providersKey(manifest.enabledProviders)
+    : 'none';
+
+  const skipStep1 = () => applyOnboardingSources(availableProviders, manifest);
+  const autoAppliedRef = useRef(false);
+
+  useEffect(() => {
+    if (loading || availableProviders.length !== 1 || autoAppliedRef.current) return;
+    autoAppliedRef.current = true;
+    applyOnboardingSources(availableProviders, manifest);
+  }, [loading, availableKey, manifestKey]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key !== 'Enter' || ['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
         return;
       }
+      if (loading) return;
+      if (availableProviders.length === 1) return;
       if (step === 1) setStep(2);
       else {
         const enabled = usePreferencesStore.getState().enabledProviders;
-        if (enabled.length) applyOnboardingSources(enabled);
+        if (enabled.length) applyOnboardingSources(enabled, manifest);
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [step, setStep]);
+  }, [step, setStep, loading, availableKey, manifestKey]);
 
-  if (step === 2) {
-    return <OnboardingStep2 onBack={() => setStep(1)} />;
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-sm text-[var(--text-muted)]">
+        Loading setup…
+      </div>
+    );
   }
 
-  return <OnboardingStep1 onContinue={() => setStep(2)} />;
+  if (availableProviders.length === 1) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-sm text-[var(--text-muted)]">
+        Connecting…
+      </div>
+    );
+  }
+
+  if (step === 2) {
+    return (
+      <OnboardingStep2
+        onBack={() => setStep(1)}
+        availableProviders={availableProviders}
+        manifest={manifest}
+      />
+    );
+  }
+
+  return <OnboardingStep1 onContinue={() => setStep(2)} onSkip={skipStep1} />;
 }

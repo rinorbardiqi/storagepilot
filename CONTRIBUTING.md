@@ -6,7 +6,7 @@ Thanks for your interest in contributing!
 
 1. Fork and clone the repo
 2. `cd app && pnpm install`
-3. Start emulators: `docker compose up fake-gcs minio azurite -d`
+3. Start emulators: `docker compose -f docker-compose.stack.yml up fake-gcs minio azurite -d`
 4. Run the dev server: `pnpm run dev`
 
 ## Code style

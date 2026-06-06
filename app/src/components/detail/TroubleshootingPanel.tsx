@@ -4,9 +4,9 @@ import { useToast } from '../../hooks/useToast';
 import type { ProviderType } from '../../api/types';
 
 const COMMANDS: Record<ProviderType, string> = {
-  gcs: 'gcloud beta emulators storage start',
-  s3: 'docker compose up minio',
-  azure: 'docker compose up azurite',
+  gcs: 'docker run -d -p 3000:80 -e ENABLED_PROVIDERS=gcs -v storagepilot-data:/data rinorbardiqi/storagepilot:full',
+  s3: 'docker run -d -p 3000:80 -p 9000:9000 -e ENABLED_PROVIDERS=s3 -v storagepilot-data:/data rinorbardiqi/storagepilot:full',
+  azure: 'docker run -d -p 3000:80 -e ENABLED_PROVIDERS=azure -v storagepilot-data:/data rinorbardiqi/storagepilot:full',
 };
 
 const FIXES = [

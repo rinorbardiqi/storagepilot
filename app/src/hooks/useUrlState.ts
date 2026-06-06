@@ -24,8 +24,8 @@ export function useUrlState(hydrated = true) {
   const setCurrentPrefix = useAppStore((s) => s.setCurrentPrefix);
   const setViewMode = useAppStore((s) => s.setViewMode);
   const setSearchQuery = useAppStore((s) => s.setSearchQuery);
-  const profiles = useConnectionStore((s) => s.profiles);
   const setActiveProfile = useConnectionStore((s) => s.setActiveProfile);
+  const searchKey = searchParams.toString();
 
   // Track whether we've done the initial URL→store sync so we don't re-apply
   // stale URL params on every unrelated store update.
@@ -36,13 +36,14 @@ export function useUrlState(hydrated = true) {
     // Only apply URL→store once per route change (route params changing means
     // genuine browser navigation, so we reset the flag).
     initialSyncDone.current = false;
-  }, [hydrated, provider, bucket, prefix, searchParams]);
+  }, [hydrated, provider, bucket, prefix, searchKey]);
 
   useEffect(() => {
     if (!hydrated || initialSyncDone.current) return;
     initialSyncDone.current = true;
 
     if (provider) {
+      const profiles = useConnectionStore.getState().profiles;
       const profile = profiles.find((p) => p.type === provider);
       if (profile) setActiveProfile(profile.id);
     }
@@ -61,8 +62,7 @@ export function useUrlState(hydrated = true) {
     provider,
     bucket,
     prefix,
-    searchParams,
-    profiles,
+    searchKey,
     setActiveProfile,
     setCurrentBucket,
     setCurrentPrefix,

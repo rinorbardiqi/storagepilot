@@ -1,0 +1,7 @@
+# Override: S3 (MinIO) only — omit GCS and Azure emulators.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.s3-only.yml up -d
+
+services:
+  storagepilot:
+    environment:
+      ENABLED_PROVIDERS: s3

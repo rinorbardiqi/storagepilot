@@ -2,60 +2,18 @@ name: storagepilot
 
 services:
   storagepilot:
-    image: ${STORAGEPILOT_IMAGE:-rinorbardiqi/storagepilot:latest}
-    pull_policy: always
+    image: ${STORAGEPILOT_IMAGE:-rinorbardiqi/storagepilot:full}
+    pull_policy: never
     build:
       context: ./app
+      target: full
     ports:
       - "${PORT:-3000}:80"
-    # UI starts without emulators; nginx resolves backends per request.
-    restart: unless-stopped
-
-  fake-gcs:
-    image: fsouza/fake-gcs-server:latest
-    command: -scheme http -port 4443 -public-host localhost:4443
+      - "9000:9000"
     volumes:
-      - ./data/gcs:/data
-    ports:
-      - "4443:4443"
-    restart: unless-stopped
-
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
+      - ./data:/data
     environment:
+      ENABLED_PROVIDERS: ${ENABLED_PROVIDERS:-gcs,s3,azure}
       MINIO_ROOT_USER: ${MINIO_USER:-storagepilot}
       MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:-storagepilot}
-    volumes:
-      - ./data/s3:/data
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
     restart: unless-stopped
-
-  azurite:
-    image: mcr.microsoft.com/azure-storage/azurite:latest
-    command: azurite-blob --blobHost 0.0.0.0 --loose --skipApiVersionCheck
-    volumes:
-      - ./data/azure:/data
-    ports:
-      - "10000:10000"
-    restart: unless-stopped
-
-  minio-cors:
-    image: minio/mc:latest
-    depends_on:
-      minio:
-        condition: service_healthy
-    entrypoint: /bin/sh
-    command: >
-      -c "
-      mc alias set local http://minio:9000 storagepilot storagepilot &&
-      mc admin config set local api cors_allow_origin='*' || true
-      "
-    restart: "no"

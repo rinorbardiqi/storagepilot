@@ -87,7 +87,6 @@ function ToolCard({
 }
 
 function useCorsPreview(bucket: string | null) {
-  const getActiveProvider = useConnectionStore((s) => s.getActiveProvider);
   const activeProfileId = useConnectionStore((s) => s.activeProfileId);
   const [rules, setRules] = useState<CorsRule[] | null>(null);
 
@@ -96,7 +95,7 @@ function useCorsPreview(bucket: string | null) {
       setRules(null);
       return;
     }
-    const provider = getActiveProvider();
+    const provider = useConnectionStore.getState().getActiveProvider();
     if (!provider) return;
     let cancelled = false;
     void provider
@@ -110,7 +109,7 @@ function useCorsPreview(bucket: string | null) {
     return () => {
       cancelled = true;
     };
-  }, [bucket, activeProfileId, getActiveProvider]);
+  }, [bucket, activeProfileId]);
 
   return rules;
 }

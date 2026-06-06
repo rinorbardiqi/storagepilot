@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useBuckets } from '../../hooks/useBuckets';
+import { refreshBuckets } from '../../store/bucketStore';
 import { useAppStore } from '../../store/appStore';
 import { useConnectionStore } from '../../store/connectionStore';
 import { useModalStore } from '../../store/modalStore';
@@ -28,8 +29,9 @@ export function FakeDataModal() {
   const currentBucket = useAppStore((s) => s.currentBucket);
   const currentPrefix = useAppStore((s) => s.currentPrefix);
   const invalidateObjects = useAppStore((s) => s.invalidateObjects);
-  const { buckets, loading: bucketsLoading, refresh: refreshBuckets } = useBuckets();
+  const { buckets, loading: bucketsLoading } = useBuckets();
   const toast = useToast();
+  const openedRef = useRef(false);
 
   const [selectedBucket, setSelectedBucket] = useState<string>('');
   const [kind, setKind] = useState<FakeDataKind>('json');
@@ -44,13 +46,22 @@ export function FakeDataModal() {
     typeof payload === 'object' && payload?.bucket ? payload.bucket : null;
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      openedRef.current = false;
+      return;
+    }
+    if (openedRef.current) return;
+    openedRef.current = true;
     if (connectionStatus === 'connected') void refreshBuckets();
+  }, [isOpen, connectionStatus]);
+
+  useEffect(() => {
+    if (!isOpen) return;
     const initial =
       payloadBucket ?? currentBucket ?? buckets[0]?.name ?? '';
     setSelectedBucket(initial);
     setPrefix(currentPrefix);
-  }, [isOpen, payloadBucket, currentBucket, currentPrefix, buckets, connectionStatus, refreshBuckets]);
+  }, [isOpen, payloadBucket, currentBucket, currentPrefix, buckets]);
 
   const onKindChange = (next: FakeDataKind) => {
     setKind(next);

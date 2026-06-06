@@ -52,7 +52,37 @@ Zustand stores with `persist` middleware for connection profiles, preferences, a
 
 ## Deployment
 
-Multi-stage Docker build (~30MB nginx image). Environment variables `GCS_URL`, `S3_URL`, `AZURE_URL` configure upstream emulators at container start via `envsubst`.
+Two published images from [`app/Dockerfile`](../app/Dockerfile):
+
+| Target | Tag | Size | Contents |
+|--------|-----|------|----------|
+| `ui` | `:ui`, `:latest` | ~30MB | nginx + React SPA; proxies to external emulators |
+| `full` | `:full` | ~200–350MB | UI + fake-gcs-server + MinIO + Azurite in one container |
+
+### Bundled (`:full`) layout
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              Single container (storagepilot:full)            │
+│  ┌─────────────┐  ┌──────────────┐  ┌──────────────────┐  │
+│  │ nginx :80   │  │ fake-gcs     │  │ MinIO :9000      │  │
+│  │ React SPA   │──│ 127.0.0.1    │  │ (browser direct) │  │
+│  │ + proxy     │  │ :4443        │  └──────────────────┘  │
+│  │ + manifest  │  └──────────────┘  ┌──────────────────┐  │
+│  └─────────────┘                    │ Azurite          │  │
+│                                     │ 127.0.0.1:10000  │  │
+│                                     └──────────────────┘  │
+│  /data/gcs · /data/s3 · /data/azure                        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+`ENABLED_PROVIDERS` (default `gcs,s3,azure`) controls which emulator processes start. The entrypoint writes `/setup-manifest.json` so onboarding only offers running providers.
+
+S3 still talks directly to MinIO on port 9000 from the browser (SigV4 path signing). GCS and Azure are proxied through nginx on port 80.
+
+### UI-only (`:ui`) layout
+
+Nginx resolves upstreams via `STORAGEPILOT_HOST` (standalone) or Docker service names `fake-gcs`, `minio`, `azurite` (multi-container [`docker-compose.stack.yml`](../docker-compose.stack.yml)).
 
 See [self-hosting.md](self-hosting.md) for deployment options.
 

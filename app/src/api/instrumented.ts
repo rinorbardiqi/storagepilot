@@ -5,6 +5,13 @@ import type { StorageProvider } from './StorageProvider';
 /** Sync helpers — must not be wrapped or callers receive Promises instead of values. */
 const SYNC_METHODS = new Set(['getObjectUrl', 'getPathFormats']);
 
+/** Coalesce concurrent identical calls (guards against effect dependency loops). */
+const INFLIGHT = new Map<string, Promise<unknown>>();
+
+function inflightKey(provider: string, method: string): string {
+  return `${provider}:${method}`;
+}
+
 /**
  * Wraps a StorageProvider with an activity-logging proxy.
  * The logger is injected so this module has no dependency on the UI store layer.
@@ -20,31 +27,45 @@ export function instrument(provider: StorageProvider, logger: ActivityLogger): S
       }
 
       return async (...args: unknown[]) => {
-        const start = performance.now();
-        const entry = {
-          id: crypto.randomUUID(),
-          method: String(prop),
-          provider: target.type,
-          args: sanitizeMethodArgs(args),
-          timestamp: new Date(),
-          status: 'pending' as const,
-          duration: 0,
-        };
-        logger.addEntry(entry);
+        const method = String(prop);
+        const key = inflightKey(target.type, method);
+        const pending = INFLIGHT.get(key);
+        if (pending) return pending;
+
+        const run = (async () => {
+          const start = performance.now();
+          const entry = {
+            id: crypto.randomUUID(),
+            method,
+            provider: target.type,
+            args: sanitizeMethodArgs(args),
+            timestamp: new Date(),
+            status: 'pending' as const,
+            duration: 0,
+          };
+          logger.addEntry(entry);
+          try {
+            const result = await orig.apply(target, args);
+            logger.updateEntry(entry.id, {
+              status: 'success',
+              duration: performance.now() - start,
+            });
+            return result;
+          } catch (err: unknown) {
+            logger.updateEntry(entry.id, {
+              status: 'error',
+              duration: performance.now() - start,
+              error: err instanceof Error ? err.message : String(err),
+            });
+            throw err;
+          }
+        })();
+
+        INFLIGHT.set(key, run);
         try {
-          const result = await orig.apply(target, args);
-          logger.updateEntry(entry.id, {
-            status: 'success',
-            duration: performance.now() - start,
-          });
-          return result;
-        } catch (err: unknown) {
-          logger.updateEntry(entry.id, {
-            status: 'error',
-            duration: performance.now() - start,
-            error: err instanceof Error ? err.message : String(err),
-          });
-          throw err;
+          return await run;
+        } finally {
+          if (INFLIGHT.get(key) === run) INFLIGHT.delete(key);
         }
       };
     },

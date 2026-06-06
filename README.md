@@ -2,21 +2,59 @@
 
 Unified open-source web UI for local cloud storage emulators — **GCS** (fake-gcs-server), **S3** (MinIO), and **Azure** (Azurite).
 
-One Docker image. One origin. Zero CORS headaches.
+One Docker pull. One origin. Zero CORS headaches.
 
 ## Quick start (Docker Hub)
 
-The fastest way to run StoragePilot is to pull the pre-built image from Docker Hub — no build step required.
-
 **Image:** [`rinorbardiqi/storagepilot`](https://hub.docker.com/r/rinorbardiqi/storagepilot)
 
+### Option A — All-in-one (`:full`, recommended)
+
+UI plus bundled emulators in a single container. No compose file required.
+
 ```bash
-docker pull rinorbardiqi/storagepilot:latest
+docker pull rinorbardiqi/storagepilot:full
+docker run -d \
+  --name storagepilot \
+  -p 3000:80 \
+  -p 9000:9000 \
+  -v storagepilot-data:/data \
+  rinorbardiqi/storagepilot:full
 ```
 
-### Option A — Full stack with Docker Compose (recommended)
+Open [http://localhost:3000](http://localhost:3000).
 
-Runs the UI plus all three emulators. Clone the repo for the compose file, then start everything:
+Default MinIO credentials: `storagepilot` / `storagepilot`
+
+#### Choose which providers to run
+
+Set `ENABLED_PROVIDERS` when starting the container (comma-separated: `gcs`, `s3`, `azure`). Default is all three.
+
+```bash
+# S3 only
+docker run -d --name storagepilot \
+  -p 3000:80 -p 9000:9000 \
+  -e ENABLED_PROVIDERS=s3 \
+  -v storagepilot-data:/data \
+  rinorbardiqi/storagepilot:full
+
+# GCS + Azure (no port 9000 needed)
+docker run -d --name storagepilot \
+  -p 3000:80 \
+  -e ENABLED_PROVIDERS=gcs,azure \
+  -v storagepilot-data:/data \
+  rinorbardiqi/storagepilot:full
+```
+
+| Combination | Ports to expose |
+|-------------|-----------------|
+| All providers | `3000:80`, `9000:9000` |
+| Includes `s3` | `9000:9000` (SigV4 requires direct MinIO access) |
+| `gcs` and/or `azure` only | `3000:80` |
+
+Onboarding reads `/setup-manifest.json` and only offers providers running in your container.
+
+### Option B — Docker Compose (full image)
 
 ```bash
 git clone https://github.com/rinorbardiqi/storagepilot.git
@@ -24,43 +62,38 @@ cd storagepilot
 docker compose up -d
 ```
 
-Compose pulls `rinorbardiqi/storagepilot:latest` automatically — you do not need to build the image locally.
+Override examples:
 
-Open [http://localhost:3000](http://localhost:3000).
+```bash
+# S3 only
+docker compose -f docker-compose.yml -f docker-compose.s3-only.yml up -d
 
-| Service | URL |
-|---------|-----|
-| StoragePilot UI | http://localhost:3000 |
-| MinIO API | http://localhost:9000 |
-| MinIO Console | http://localhost:9001 |
-| fake-gcs-server | http://localhost:4443 |
-| Azurite (blob) | http://localhost:10000 |
+# GCS + Azure only
+docker compose -f docker-compose.yml -f docker-compose.gcs-azure.yml up -d
+```
 
-Default MinIO credentials: `storagepilot` / `storagepilot`
+Data persists under `./data` (subdirs `gcs`, `s3`, `azure` per enabled provider).
 
-Data is persisted under `./data/gcs`, `./data/s3`, and `./data/azure`.
+### Option C — UI only (`:ui`)
 
-### Option B — UI only with Docker Compose
+Use when emulators already run on your machine or another host.
 
-Use this when emulators are already running on your machine or another host.
+```bash
+docker pull rinorbardiqi/storagepilot:ui
+docker run -d --name storagepilot \
+  -p 3000:80 \
+  -e STORAGEPILOT_HOST=host.docker.internal \
+  --add-host=host.docker.internal:host-gateway \
+  rinorbardiqi/storagepilot:ui
+```
 
-From the repo:
+Or from the repo:
 
 ```bash
 docker compose -f docker-compose.standalone.yml up -d
 ```
 
-Or with `docker run`:
-
-```bash
-docker run -d --name storagepilot \
-  -p 3000:80 \
-  -e STORAGEPILOT_HOST=host.docker.internal \
-  --add-host=host.docker.internal:host-gateway \
-  rinorbardiqi/storagepilot:latest
-```
-
-`STORAGEPILOT_HOST` is the hostname where your emulators listen on the default ports:
+`STORAGEPILOT_HOST` is the hostname where emulators listen on the default ports:
 
 | Provider | Port |
 |----------|------|
@@ -68,126 +101,65 @@ docker run -d --name storagepilot \
 | S3 (MinIO) | 9000 |
 | Azure (Azurite) | 10000 |
 
-Remote emulator host:
+## Image tags
 
-```bash
-STORAGEPILOT_HOST=192.168.1.50 docker compose -f docker-compose.standalone.yml up -d
-```
+| Tag | Contents | When to use |
+|-----|----------|-------------|
+| **`full`** | UI + bundled emulators | Default for new users — one pull, everything works |
+| **`ui`** | nginx + React SPA only | External emulators on host or compose network |
+| **`latest`** | Same as `:ui` | Backward compatible with v0.1.0 |
+| **`v0.2.0-full`** | Pinned bundled release | Production pin for all-in-one |
+| **`v0.2.0`** | Pinned UI-only release | Production pin for standalone proxy |
 
-## Docker Compose
-
-StoragePilot ships with three compose files. Pick the one that matches your setup.
+## Docker Compose files
 
 | File | What it runs |
 |------|----------------|
-| `docker-compose.yml` | UI + GCS + S3 + Azure emulators (full stack) |
-| `docker-compose.standalone.yml` | UI only — connects to emulators on your host |
-| `docker-compose.dev.yml` | Overlay for hot-reload dev (use with the full stack file) |
+| `docker-compose.yml` | All-in-one `:full` image (single service) |
+| `docker-compose.s3-only.yml` | Override — S3 only |
+| `docker-compose.gcs-azure.yml` | Override — GCS + Azure only |
+| `docker-compose.standalone.yml` | UI-only `:ui` image |
+| `docker-compose.stack.yml` | Multi-container stack for contributors |
+| `docker-compose.dev.yml` | Vite hot-reload overlay (use with `stack.yml`) |
 
-### Use the repo compose files
-
-**Full stack** — UI and all emulators together:
-
-```bash
-docker compose up -d
-```
-
-**UI only** — emulators already running elsewhere:
-
-```bash
-docker compose -f docker-compose.standalone.yml up -d
-```
-
-**Development** — emulators in Docker, Vite dev server with hot reload:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up
-```
-
-Open the dev UI at [http://localhost:5173](http://localhost:5173).
-
-### Add StoragePilot to your own `docker-compose.yml`
-
-Drop this service into an existing compose file. No build step — it pulls from Docker Hub.
-
-**Full stack** (emulators in the same compose network — use the internal service names `fake-gcs`, `minio`, `azurite` as shown in the repo's `docker-compose.yml`):
-
-```yaml
-services:
-  storagepilot:
-    image: rinorbardiqi/storagepilot:latest
-    ports:
-      - "3000:80"
-    restart: unless-stopped
-    # Omit STORAGEPILOT_HOST — nginx auto-discovers emulator containers on the compose network.
-```
-
-**Standalone** (emulators on the Docker host or another machine):
-
-```yaml
-services:
-  storagepilot:
-    image: rinorbardiqi/storagepilot:latest
-    ports:
-      - "3000:80"
-    environment:
-      STORAGEPILOT_HOST: host.docker.internal   # or 192.168.1.50 for a remote host
-    extra_hosts:
-      - "host.docker.internal:host-gateway"     # Linux: lets the container reach the host
-    restart: unless-stopped
-```
-
-**Pin a version:**
-
-```yaml
-services:
-  storagepilot:
-    image: rinorbardiqi/storagepilot:v0.1.0
-    ports:
-      - "3000:80"
-```
-
-### Compose environment variables
+### Environment variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `STORAGEPILOT_IMAGE` | `rinorbardiqi/storagepilot:latest` | Docker image to pull |
+| `STORAGEPILOT_IMAGE` | `rinorbardiqi/storagepilot:full` | Image for main compose |
+| `ENABLED_PROVIDERS` | `gcs,s3,azure` | Emulators to start (`:full` only) |
 | `PORT` | `3000` | Host port mapped to the UI |
-| `STORAGEPILOT_HOST` | *(not set)* | Host for external emulators (standalone only) |
-| `MINIO_USER` | `storagepilot` | MinIO root user (full stack) |
-| `MINIO_PASSWORD` | `storagepilot` | MinIO root password (full stack) |
+| `MINIO_USER` | `storagepilot` | MinIO root user |
+| `MINIO_PASSWORD` | `storagepilot` | MinIO root password |
+| `STORAGEPILOT_HOST` | *(standalone only)* | Host for external emulators |
 
 Examples:
 
 ```bash
-# Custom port and pinned image
-PORT=8080 STORAGEPILOT_IMAGE=rinorbardiqi/storagepilot:v0.1.0 docker compose up -d
+# Pinned full image
+STORAGEPILOT_IMAGE=rinorbardiqi/storagepilot:v0.2.0-full docker compose up -d
 
-# Standalone pointing at host emulators
+# S3-only via compose
+docker compose -f docker-compose.yml -f docker-compose.s3-only.yml up -d
+
+# Standalone UI pointing at host emulators
 STORAGEPILOT_HOST=host.docker.internal docker compose -f docker-compose.standalone.yml up -d
-
-# Pull latest image and recreate the UI container
-docker compose pull storagepilot && docker compose up -d storagepilot
 ```
 
 ## First-time setup in the UI
 
-1. Open the app and complete onboarding — pick one, two, or all providers.
-2. Confirm each emulator shows **Connected** in the sidebar.
+1. Open the app and complete onboarding — providers match what you started in Docker.
+2. Confirm each backend shows **Connected** in the sidebar.
 3. Create a bucket, upload files, or generate mock data from **Developer Tools**.
 
 ## Common commands
 
 ```bash
-# Pull the latest image and restart
-docker compose pull storagepilot
-docker compose up -d storagepilot
+# Pull and restart full stack
+docker compose pull storagepilot && docker compose up -d storagepilot
 
-# View UI logs
+# View logs
 docker compose logs -f storagepilot
-
-# Change the host port (default 3000)
-PORT=8080 docker compose up -d
 
 # Tear down
 docker compose down
@@ -195,31 +167,31 @@ docker compose down
 
 ## Local development
 
-For UI changes, run the React app against emulators in Docker:
-
 ```bash
-# Start emulators only
-docker compose up fake-gcs minio azurite -d
+# Separate emulator containers + Vite dev server
+docker compose -f docker-compose.stack.yml -f docker-compose.dev.yml up
 
-# Run the dev server
-cd app
-pnpm install
-pnpm run dev
+# Or emulators only + local Vite
+docker compose -f docker-compose.stack.yml up fake-gcs minio azurite -d
+cd app && pnpm install && pnpm run dev
 ```
 
 Vite proxies `/api/gcs`, `/api/s3`, and `/api/azure` to the emulators (see `app/vite.config.ts`).
 
 ```bash
-# Run tests
 cd app && pnpm test
 ```
 
 ## Architecture
 
-Browser → nginx (port 3000) → emulators on the Docker network.
+Browser → nginx (port 3000) → emulators (bundled in `:full` or external in `:ui`).
 
-See [docs/architecture.md](docs/architecture.md) for the full system design and [docs/self-hosting.md](docs/self-hosting.md) for deployment options and environment variables.
+See [docs/architecture.md](docs/architecture.md) and [docs/self-hosting.md](docs/self-hosting.md).
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+StoragePilot is [MIT licensed](LICENSE).
+
+The **`:full`** image bundles third-party emulators with their own licenses — notably
+**MinIO (AGPL-3.0)** when S3 is enabled. The **`:ui`** image is MIT + nginx only.
+See [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md).

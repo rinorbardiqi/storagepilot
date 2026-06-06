@@ -5,6 +5,7 @@ import { useConnectionStore } from "../../store/connectionStore";
 import { useModalStore } from "../../store/modalStore";
 import { useSelectionStore } from "../../store/selectionStore";
 import { useToast } from "../../hooks/useToast";
+import { useToastStore } from "../../store/toastStore";
 import { formatBytes } from "../../lib/formatBytes";
 import {
   buildDestinationKey,
@@ -54,6 +55,10 @@ export function CopyMoveModal() {
   }, [payload]);
 
   useEffect(() => {
+    if (!active) {
+      setDestBuckets([]);
+      return;
+    }
     if (!destProfileId) {
       setDestBuckets([]);
       return;
@@ -69,13 +74,18 @@ export function CopyMoveModal() {
       .catch((err) => {
         if (!cancelled) {
           setDestBuckets([]);
-          toast.error(err instanceof Error ? err.message : "Failed to load destination buckets");
+          useToastStore.getState().show({
+            type: "error",
+            message:
+              err instanceof Error ? err.message : "Failed to load destination buckets",
+            duration: 5000,
+          });
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [destProfileId, getProviderForProfile, toast]);
+  }, [active, destProfileId, getProviderForProfile]);
 
   const totalSize = useMemo(
     () => payload?.sizes?.reduce((sum, n) => sum + n, 0) ?? 0,

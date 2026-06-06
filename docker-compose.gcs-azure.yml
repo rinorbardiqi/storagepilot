@@ -1,0 +1,9 @@
+# Override: GCS + Azure only — no MinIO, no port 9000 required.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.gcs-azure.yml up -d
+
+services:
+  storagepilot:
+    ports: !reset
+      - "${PORT:-3000}:80"
+    environment:
+      ENABLED_PROVIDERS: gcs,azure

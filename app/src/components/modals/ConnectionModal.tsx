@@ -133,7 +133,7 @@ export function ConnectionModal() {
   const handleTest = async () => {
     const id = saveAndActivateProfile();
     if (!id) return;
-    const ok = await testConnection(id);
+    const ok = await testConnection(id, { force: true });
     toast[ok ? 'success' : 'error'](ok ? 'Connection successful' : 'Connection failed');
   };
 

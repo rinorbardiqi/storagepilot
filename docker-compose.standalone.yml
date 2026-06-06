@@ -5,8 +5,11 @@ name: storagepilot-standalone
 
 services:
   storagepilot:
-    image: ${STORAGEPILOT_IMAGE:-rinorbardiqi/storagepilot:latest}
+    image: ${STORAGEPILOT_IMAGE:-rinorbardiqi/storagepilot:ui}
     pull_policy: always
+    build:
+      context: ./app
+      target: ui
     ports:
       - "${PORT:-3000}:80"
     environment:

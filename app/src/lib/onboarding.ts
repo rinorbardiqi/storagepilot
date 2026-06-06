@@ -5,6 +5,11 @@ import {
   DEFAULT_PROFILE_BY_TYPE,
   normalizeEnabledProviders,
 } from './providerSelection';
+import {
+  availableProvidersFromManifest,
+  filterToAvailable,
+  type SetupManifest,
+} from './setupManifest';
 
 export {
   ALL_PROVIDER_TYPES,
@@ -13,9 +18,14 @@ export {
   toggleProviderSelection,
 } from './providerSelection';
 
-export function applyOnboardingSources(types: ProviderType[]): void {
-  const enabled = normalizeEnabledProviders(types);
-  const primary = enabled[0];
+export function applyOnboardingSources(
+  types: ProviderType[],
+  manifest?: SetupManifest | null,
+): void {
+  const allowed = availableProvidersFromManifest(manifest ?? null);
+  const filtered = filterToAvailable(types, manifest ?? null);
+  const enabled = normalizeEnabledProviders(filtered.length ? filtered : allowed);
+  const primary = enabled[0]!;
 
   usePreferencesStore.getState().setEnabledProviders(enabled);
   useConnectionStore.getState().setActiveProfile(DEFAULT_PROFILE_BY_TYPE[primary]);

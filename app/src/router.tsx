@@ -3,6 +3,7 @@ import { AppShell } from './components/layout/AppShell';
 import { useUrlState } from './hooks/useUrlState';
 import { useKeyboard } from './hooks/useKeyboard';
 import { useConnectionBootstrap } from './hooks/useConnectionBootstrap';
+import { useBucketSync } from './hooks/useBucketSync';
 import { useStoreHydration } from './hooks/useStoreHydration';
 import { useNavigationSideEffects } from './hooks/useNavigationSideEffects';
 
@@ -11,6 +12,7 @@ function AppLayout() {
   useUrlState(hydrated);
   useKeyboard();
   useConnectionBootstrap(hydrated);
+  useBucketSync();
   useNavigationSideEffects();
   return <AppShell />;
 }

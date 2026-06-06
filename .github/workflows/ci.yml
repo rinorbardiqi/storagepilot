@@ -32,20 +32,64 @@ jobs:
       - run: pnpm run test
       - run: pnpm run build
 
-  smoke:
+  smoke-full:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     steps:
       - uses: actions/checkout@v4
-      - run: docker compose up -d
+
+      - name: Build full image
+        run: docker build -f app/Dockerfile --target full -t storagepilot:full ./app
+
+      - name: Start full stack (all providers)
+        run: |
+          docker run -d --name storagepilot-full \
+            -p 3000:80 -p 9000:9000 \
+            -v "$(pwd)/data-smoke:/data" \
+            storagepilot:full
+
       - name: Wait for UI
         run: |
-          for i in $(seq 1 36); do
+          for i in $(seq 1 60); do
             curl -fsS http://localhost:3000/ > /dev/null && exit 0
-            sleep 5
+            sleep 2
           done
-          echo "StoragePilot did not become ready in time"
-          docker compose logs storagepilot
+          docker logs storagepilot-full
           exit 1
-      - run: docker compose down
+
+      - name: Check setup manifest
+        run: |
+          curl -fsS http://localhost:3000/setup-manifest.json | grep -q '"enabledProviders"'
+
+      - name: Check MinIO health
+        run: curl -fsS http://localhost:9000/minio/health/ready
+
+      - name: Stop full container
         if: always()
+        run: docker rm -f storagepilot-full
+
+      - name: Start S3-only stack
+        run: |
+          docker run -d --name storagepilot-s3 \
+            -p 3001:80 -p 9001:9000 \
+            -e ENABLED_PROVIDERS=s3 \
+            -v "$(pwd)/data-smoke-s3:/data" \
+            storagepilot:full
+
+      - name: Wait for S3-only UI
+        run: |
+          for i in $(seq 1 60); do
+            curl -fsS http://localhost:3001/ > /dev/null && exit 0
+            sleep 2
+          done
+          docker logs storagepilot-s3
+          exit 1
+
+      - name: GCS proxy disabled when S3-only
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3001/api/gcs/storage/v1/b)
+          test "$code" = "503"
+
+      - name: Stop S3-only container
+        if: always()
+        run: docker rm -f storagepilot-s3

@@ -382,7 +382,9 @@ export function PerformanceMetricsModal() {
 
   useEffect(() => {
     if (!isOpen) return;
+    const status = useConnectionStore.getState().connectionStatus;
     for (const id of ['default-gcs', 'default-s3', 'default-azure'] as const) {
+      if (status[id] === 'connected' || status[id] === 'checking') continue;
       void testConnection(id);
     }
   }, [isOpen, testConnection]);

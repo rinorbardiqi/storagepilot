@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { ProviderType } from '../api/types';
 import { ALL_PROVIDER_TYPES, normalizeEnabledProviders } from '../lib/providerSelection';
+import { providersKey } from '../lib/setupManifest';
 
 interface PreferencesState {
   theme: 'dark' | 'light';
@@ -70,7 +71,11 @@ export const usePreferencesStore = create<PreferencesState>()(
       setBucketListLayout: (bucketListLayout) => set({ bucketListLayout }),
 
       setEnabledProviders: (enabledProviders) =>
-        set({ enabledProviders: normalizeEnabledProviders(enabledProviders) }),
+        set((s) => {
+          const next = normalizeEnabledProviders(enabledProviders);
+          if (providersKey(s.enabledProviders) === providersKey(next)) return s;
+          return { enabledProviders: next };
+        }),
 
       setUiDensity: (uiDensity) => set({ uiDensity }),
 
