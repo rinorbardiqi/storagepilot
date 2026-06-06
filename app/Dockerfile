@@ -10,9 +10,10 @@ COPY . .
 RUN pnpm run build
 
 # Emulator binaries (pinned versions for reproducible multi-arch builds)
-FROM fsouza/fake-gcs-server:1.52.3 AS fake-gcs
-FROM minio/minio:RELEASE.2025-04-22T22-12-26Z AS minio-bin
-FROM mcr.microsoft.com/azure-storage/azurite:3.34.0 AS azurite-bin
+FROM fsouza/fake-gcs-server:1.54.0 AS fake-gcs
+# minio/minio was archived Apr 2026; pgsty/minio is the maintained community fork
+FROM pgsty/minio:RELEASE.2026-04-17T00-00-00Z AS minio-bin
+FROM mcr.microsoft.com/azure-storage/azurite:3.35.0 AS azurite-bin
 
 # ── Stage 2: UI-only proxy (~30MB) ──────────────────────────────────────────
 FROM nginx:alpine-slim AS ui
