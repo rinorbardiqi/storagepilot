@@ -48,7 +48,7 @@ export function StatsModal() {
               <p className="text-2xl font-mono mt-1">{stats.objectCount.toLocaleString()}</p>
             </div>
             <div className="p-4 border border-[var(--border)] rounded-[var(--radius)]">
-              <p className="text-[var(--text-muted)] text-xs">Total size</p>
+              <p className="text-[var(--text-muted)] text-xs">Storage used</p>
               <p className="text-2xl font-mono mt-1">{formatBytes(stats.totalSize)}</p>
             </div>
           </div>

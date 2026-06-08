@@ -70,8 +70,8 @@ export function ObjectTable({
           <th className="p-3 font-medium">
             <SortHeader label="Name" field="name" />
           </th>
-          <th className="p-3 font-medium w-24">
-            <SortHeader label="Size" field="size" />
+          <th className="p-3 font-medium w-28 text-right">
+            <SortHeader label="Size" field="size" align="right" />
           </th>
           <th className="p-3 font-medium w-32 text-center">
             <SortHeader label="Type" field="contentType" align="center" />
@@ -118,7 +118,7 @@ export function ObjectTable({
                   </span>
                 </div>
               </td>
-              <td className="p-3 font-mono text-[var(--text-muted)]">
+              <td className="p-3 font-mono text-[var(--text-muted)] text-right whitespace-nowrap tabular-nums">
                 {isFolder ? '—' : formatBytes(obj.size)}
               </td>
               <td className="p-3 text-[var(--text-muted)] truncate text-center">

@@ -1,6 +1,6 @@
+import { Link } from 'react-router-dom';
 import { Github, Search, Settings } from 'lucide-react';
-
-const GITHUB_REPO_URL = 'https://github.com/rinorbardiqi/storagepilot';
+import { GITHUB_REPO_URL } from '../../lib/siteLinks';
 import { useConnectionStore } from '../../store/connectionStore';
 import { useModalStore } from '../../store/modalStore';
 import { useUiStore } from '../../store/uiStore';
@@ -18,7 +18,9 @@ export function TopBar() {
 
   return (
     <header className="flex items-center h-[var(--topbar-height)] px-4 border-b border-[var(--border)] bg-[var(--bg-surface)] shrink-0">
-      <StoragePilotLogo />
+      <Link to="/" className="hover:opacity-90 transition-opacity" title="Back to home">
+        <StoragePilotLogo />
+      </Link>
 
       <div className="flex flex-1 justify-center min-w-0 px-4">
         <button

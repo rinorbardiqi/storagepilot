@@ -4,6 +4,8 @@ interface ImportMetaEnv {
   readonly VITE_GCS_BASE?: string;
   readonly VITE_S3_BASE?: string;
   readonly VITE_AZURE_BASE?: string;
+  /** Set to "marketing" for landing-only deploys (no app routes). */
+  readonly VITE_SITE_MODE?: string;
 }
 
 interface ImportMeta {

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { ArrowRight, Check, Keyboard } from 'lucide-react';
 import { StoragePilotLogo } from '../shared/StoragePilotLogo';
 import { Button } from '../shared/Button';
@@ -36,7 +37,9 @@ export function OnboardingLayout({
     <div className="flex flex-col h-screen bg-[var(--bg-base)]">
       <header className="flex items-center h-16 px-8 border-b border-[var(--border)] bg-[var(--bg-surface)] shrink-0">
         <div className="w-[464px] max-w-[30%]">
-          <StoragePilotLogo />
+          <Link to="/" className="inline-block hover:opacity-90 transition-opacity" title="Back to home">
+            <StoragePilotLogo />
+          </Link>
         </div>
         <div className="flex-1 flex justify-center">
           <div className="flex items-center gap-4">

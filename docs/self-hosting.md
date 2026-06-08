@@ -2,11 +2,11 @@
 
 ## Image tags
 
-| Tag | Contents |
-|-----|----------|
-| `rinorbardiqi/storagepilot:full` | UI + fake-gcs + MinIO + Azurite (recommended) |
-| `rinorbardiqi/storagepilot:ui` | UI proxy only |
-| `rinorbardiqi/storagepilot:latest` | Same as `:ui` (backward compatible) |
+| Tag | Contents | Compressed size (Docker Hub) |
+|-----|----------|------------------------------|
+| `rinorbardiqi/storagepilot:full` | UI + fake-gcs + MinIO + Azurite (recommended) | ~135 MB |
+| `rinorbardiqi/storagepilot:ui` | UI proxy only | ~18 MB |
+| `rinorbardiqi/storagepilot:latest` | Same as `:ui` (backward compatible) | ~18 MB |
 
 ## All-in-one (`:full`)
 

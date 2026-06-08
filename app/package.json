@@ -7,12 +7,18 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.json --noEmit && vite build",
+    "build:marketing": "tsc -p tsconfig.json --noEmit && vite build --mode marketing",
+    "preview:marketing": "vite preview --mode marketing",
     "preview": "vite preview",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:integration": "vitest run --config vitest.integration.config.ts"
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:e2e": "playwright test --project=providers",
+    "test:e2e:providers": "playwright test --project=providers",
+    "demo:record": "playwright test --project=demo",
+    "demo:record:docker": "node scripts/run-demo-docker.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.758.0",
@@ -48,6 +54,7 @@
     "typescript": "~5.7.3",
     "typescript-eslint": "^8.25.0",
     "vite": "^6.2.0",
-    "vitest": "^3.0.7"
+    "vitest": "^3.0.7",
+    "@playwright/test": "^1.52.0"
   }
 }

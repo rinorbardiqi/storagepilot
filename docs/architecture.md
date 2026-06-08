@@ -56,8 +56,8 @@ Two published images from [`app/Dockerfile`](../app/Dockerfile):
 
 | Target | Tag | Size | Contents |
 |--------|-----|------|----------|
-| `ui` | `:ui`, `:latest` | ~30MB | nginx + React SPA; proxies to external emulators |
-| `full` | `:full` | ~200–350MB | UI + fake-gcs-server + MinIO + Azurite in one container |
+| `ui` | `:ui`, `:latest` | ~18MB compressed | nginx + React SPA; proxies to external emulators |
+| `full` | `:full` | ~135MB compressed (~340MB on disk) | UI + fake-gcs-server + MinIO + Azurite in one container |
 
 ### Bundled (`:full`) layout
 

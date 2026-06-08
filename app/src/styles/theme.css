@@ -26,6 +26,9 @@
   --search-width: 600px;
   --browser-chrome-height: 40px;
   --detail-panel-width: 320px;
+  --scrollbar-track: #0d1117;
+  --scrollbar-thumb: #30363d;
+  --scrollbar-thumb-hover: #484f58;
 }
 
 :root[data-theme='light'] {
@@ -42,4 +45,7 @@
   --search-width: 600px;
   --browser-chrome-height: 40px;
   --detail-panel-width: 320px;
+  --scrollbar-track: #f6f8fa;
+  --scrollbar-thumb: #d0d7de;
+  --scrollbar-thumb-hover: #afb8c1;
 }

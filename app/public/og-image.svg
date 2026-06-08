@@ -1,0 +1,15 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" fill="#0D1117"/>
+  <rect x="0" y="628" width="1200" height="2" fill="#30363D"/>
+  <rect x="80" y="80" width="48" height="48" rx="2" fill="#58A6FF" fill-opacity="0.15" stroke="#58A6FF" stroke-opacity="0.4"/>
+  <rect x="92" y="92" width="24" height="24" rx="1" stroke="#58A6FF" stroke-width="1.5"/>
+  <path d="M92 104H116M92 112H116M98 92V116M110 92V116" stroke="#58A6FF" stroke-width="1" stroke-opacity="0.7"/>
+  <circle cx="104" cy="104" r="3" fill="#58A6FF"/>
+  <text x="148" y="118" fill="#E6EDF3" font-family="system-ui, sans-serif" font-size="42" font-weight="700" letter-spacing="2">STORAGEPILOT</text>
+  <text x="80" y="220" fill="#E6EDF3" font-family="system-ui, sans-serif" font-size="56" font-weight="600">Browse local cloud storage</text>
+  <text x="80" y="290" fill="#8B949E" font-family="system-ui, sans-serif" font-size="32">GCS · S3 · Azure  one UI, zero CORS</text>
+  <rect x="80" y="360" width="200" height="4" fill="#4285F4"/>
+  <rect x="300" y="360" width="200" height="4" fill="#FF9900"/>
+  <rect x="520" y="360" width="200" height="4" fill="#008AD7"/>
+  <text x="80" y="560" fill="#57606A" font-family="ui-monospace, monospace" font-size="22">rinorbardiqi/storagepilot:full</text>
+</svg>

@@ -19,7 +19,8 @@ function resolveGitBranch(): string {
 
 const gitBranch = resolveGitBranch();
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  base: mode === 'marketing' ? './' : '/',
   plugins: [react(), tailwindcss()],
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),
@@ -39,9 +40,8 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/api\/s3/, ''),
       },
       '/api/azure': {
-        target: 'http://localhost:10000',
+        target: process.env.VITE_AZURE_PROXY_TARGET ?? 'http://localhost:3000',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/azure/, ''),
         configure: (proxy) => {
           proxy.on('proxyRes', (proxyRes, req, res) => {
             const origin = req.headers.origin;
@@ -62,7 +62,7 @@ export default defineConfig({
               'Access-Control-Allow-Origin': origin,
               'Access-Control-Allow-Methods': 'GET, PUT, POST, DELETE, HEAD, OPTIONS',
               'Access-Control-Allow-Headers':
-                'Authorization, Content-Type, Content-Length, x-ms-date, x-ms-version, x-ms-blob-type, x-ms-copy-source, x-ms-meta-*',
+              'Authorization, Content-Type, Content-Length, x-ms-date, x-ms-version, x-ms-blob-type, x-ms-blob-content-type, x-ms-copy-source, x-ms-meta-*',
               'Access-Control-Max-Age': '86400',
               Vary: 'Origin',
             });
@@ -78,4 +78,4 @@ export default defineConfig({
     setupFiles: ['./src/test-setup.ts'],
     globals: true,
   },
-});
+}));
