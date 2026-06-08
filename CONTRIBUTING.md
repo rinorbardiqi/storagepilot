@@ -15,6 +15,25 @@ Thanks for your interest in contributing!
 - ESLint + Prettier (run `pnpm run lint` before opening a PR)
 - Match existing patterns — read `docs/` for architecture and provider conventions
 
+## Tests
+
+All tests live under `app/tests/`:
+
+| Path | Runner | Purpose |
+|------|--------|---------|
+| `tests/unit/<feature>/` | `pnpm test` | Unit + component tests grouped by UI feature or `api/` |
+| `tests/integration/api/` | `pnpm test:integration` | Provider adapters against real emulators |
+| `tests/e2e/` | `pnpm test:e2e` | Playwright end-to-end flows |
+
+Place new tests in the folder that matches the feature you changed (`browser`, `layout`, `modals`, etc.). Import source with `@/lib/...`, `@/api/...`, or `@/features/...`.
+
+```bash
+cd app
+pnpm test              # unit tests
+pnpm test:integration  # requires emulators (STORAGEPILOT_INTEGRATION=1)
+pnpm test:e2e          # Playwright
+```
+
 ## Pull requests
 
 1. Open an issue for large changes first

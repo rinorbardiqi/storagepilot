@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { reconcileProfiles } from './reconcileProfiles';
+import { reconcileProfiles } from '@/lib/reconcileProfiles';
 
 describe('reconcileProfiles', () => {
   it('restores type and endpoints for default profiles', () => {

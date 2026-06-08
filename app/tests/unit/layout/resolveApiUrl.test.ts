@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { resolveApiUrl } from './resolveApiUrl';
+import { resolveApiUrl } from '@/lib/resolveApiUrl';
 
 describe('resolveApiUrl', () => {
   it('returns absolute URLs unchanged', () => {

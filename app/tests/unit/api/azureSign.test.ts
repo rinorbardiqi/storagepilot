@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildCanonicalizedResource } from './azureSign';
+import { buildCanonicalizedResource } from '@/api/azureSign';
 
 describe('azureSign canonicalizedResource', () => {
   it('builds Azurite path-style account resource with doubled account segment', () => {

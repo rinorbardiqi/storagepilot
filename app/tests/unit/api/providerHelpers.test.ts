@@ -2,9 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   deleteBucketWithContents,
   emptyBucketContents,
-} from './providerHelpers';
-import type { StorageProvider } from './StorageProvider';
-import type { StorageObject } from './types';
+} from '@/api/providerHelpers';
+import type { StorageProvider } from '@/api/StorageProvider';
+import type { StorageObject } from '@/api/types';
 
 function mockObject(key: string): StorageObject {
   return {

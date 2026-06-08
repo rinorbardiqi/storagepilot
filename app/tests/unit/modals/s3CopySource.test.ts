@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { s3CopySource } from './s3CopySource';
+import { s3CopySource } from '@/lib/s3CopySource';
 
 describe('s3CopySource', () => {
   it('keeps path slashes between segments', () => {

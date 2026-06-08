@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { prepareBucketName, sanitizeBucketName, validateBucketName } from './bucketName';
+import { prepareBucketName, sanitizeBucketName, validateBucketName } from '@/lib/bucketName';
 
 describe('bucketName', () => {
   it('sanitizes schemes and underscores for S3', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildDestinationKey } from './transferService';
+import { buildDestinationKey } from '@/lib/transferService';
 
 describe('buildDestinationKey', () => {
   it('preserves full path when requested', () => {

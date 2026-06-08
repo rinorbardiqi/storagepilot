@@ -5,7 +5,7 @@ import {
   getPreviewKind,
   resolveContentType,
   shikiLanguageFor,
-} from './contentTypeIcons';
+} from '@/lib/contentTypeIcons';
 
 describe('contentTypeIcons', () => {
   it('infers extension from key', () => {

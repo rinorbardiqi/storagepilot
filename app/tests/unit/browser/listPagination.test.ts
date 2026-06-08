@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { OBJECTS_PAGE_SIZE, shouldShowListPagination } from './listPagination';
+import { OBJECTS_PAGE_SIZE, shouldShowListPagination } from '@/lib/listPagination';
 
 describe('listPagination', () => {
   it('uses a reasonable default page size', () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { AzureProvider } from './AzureProvider';
-import { AZURITE_ACCOUNT_KEY } from '../lib/emulatorEndpoints';
+import { AzureProvider } from '@/api/AzureProvider';
+import { AZURITE_ACCOUNT_KEY } from '@/lib/emulatorEndpoints';
 
 const AZURITE_UP = process.env.AZURITE_INTEGRATION === '1' || process.env.STORAGEPILOT_INTEGRATION === '1';
 

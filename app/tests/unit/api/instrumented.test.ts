@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { instrument } from '../api/instrumented';
-import { nullLogger } from '../api/ActivityLogger';
-import type { StorageProvider } from '../api/StorageProvider';
+import { instrument } from '@/api/instrumented';
+import { nullLogger } from '@/api/ActivityLogger';
+import type { StorageProvider } from '@/api/StorageProvider';
 
 function mockProvider(): StorageProvider {
   return {

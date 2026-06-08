@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { buildDefaultProfiles } from './reconcileProfiles';
-import { buildPathFormats } from './pathFormatters';
-import { generateSnippet, generateSnippetForProfile } from './snippetTemplates';
+import { buildDefaultProfiles } from '@/lib/reconcileProfiles';
+import { buildPathFormats } from '@/lib/pathFormatters';
+import { generateSnippet, generateSnippetForProfile } from '@/lib/snippetTemplates';
 
 const profiles = buildDefaultProfiles();
 const bucket = 'my-bucket';

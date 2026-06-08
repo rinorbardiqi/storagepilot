@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatBytes } from './formatBytes';
+import { formatBytes } from '@/lib/formatBytes';
 
 describe('formatBytes', () => {
   it.each([

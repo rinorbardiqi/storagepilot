@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appendAzureQuery, buildAzureQueryString } from './azureQuery';
+import { appendAzureQuery, buildAzureQueryString } from '@/api/azureQuery';
 
 describe('azureQuery', () => {
   it('encodes spaces as %20 not +', () => {

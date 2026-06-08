@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { AzureProvider } from './AzureProvider';
-import { GCSProvider } from './GCSProvider';
-import { S3Provider } from './S3Provider';
-import type { StorageProvider } from './StorageProvider';
-import { deleteBucketWithContents } from './providerHelpers';
-import { AZURITE_ACCOUNT_KEY } from '../lib/emulatorEndpoints';
+import { AzureProvider } from '@/api/AzureProvider';
+import { GCSProvider } from '@/api/GCSProvider';
+import { S3Provider } from '@/api/S3Provider';
+import type { StorageProvider } from '@/api/StorageProvider';
+import { deleteBucketWithContents } from '@/api/providerHelpers';
+import { AZURITE_ACCOUNT_KEY } from '@/lib/emulatorEndpoints';
 
 const INTEGRATION = process.env.STORAGEPILOT_INTEGRATION === '1';
 

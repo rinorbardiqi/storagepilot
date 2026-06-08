@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { ConnectionProfile } from '../api/providerFactory';
-import { getProviderConnectionInfo } from './connectionStrings';
+import type { ConnectionProfile } from '@/api/providerFactory';
+import { getProviderConnectionInfo } from '@/lib/connectionStrings';
 
 const gcsProfile: ConnectionProfile = {
   id: 'default-gcs',

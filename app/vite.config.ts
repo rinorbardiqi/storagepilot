@@ -22,6 +22,11 @@ const gitBranch = resolveGitBranch();
 
 export default defineConfig(({ mode }) => ({
   base: mode === 'marketing' ? './' : '/',
+  resolve: {
+    alias: {
+      '@': resolve(__dirname, 'src'),
+    },
+  },
   plugins: [react(), tailwindcss()],
   build: {
     rollupOptions: {
@@ -84,9 +89,9 @@ export default defineConfig(({ mode }) => ({
   },
   test: {
     environment: 'jsdom',
-    setupFiles: ['./src/test-setup.ts'],
+    setupFiles: ['./tests/setup/vitest.setup.ts'],
     globals: true,
-    include: ['src/**/*.{test,spec}.{ts,tsx}'],
-    exclude: ['tests/**', '**/node_modules/**', '**/dist/**'],
+    include: ['tests/unit/**/*.{test,spec}.{ts,tsx}'],
+    exclude: ['tests/e2e/**', 'tests/integration/**', '**/node_modules/**', '**/dist/**'],
   },
 }));

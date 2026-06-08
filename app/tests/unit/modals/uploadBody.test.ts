@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeUploadFile, sanitizeMethodArgs, toUploadBytes } from './uploadBody';
+import { describeUploadFile, sanitizeMethodArgs, toUploadBytes } from '@/lib/uploadBody';
 
 describe('uploadBody', () => {
   it('converts File to Uint8Array', async () => {

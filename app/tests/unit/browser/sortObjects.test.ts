@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { sortObjects, sortPrefixes, matchesBrowserSearch } from './sortObjects';
-import type { StorageObject } from '../api/types';
+import { sortObjects, sortPrefixes, matchesBrowserSearch } from '@/lib/sortObjects';
+import type { StorageObject } from '@/api/types';
 
 function obj(key: string, overrides: Partial<Omit<StorageObject, 'key'>> = {}): StorageObject {
   return {

@@ -4,7 +4,7 @@ import {
   fetchSetupManifest,
   filterToAvailable,
   resetSetupManifestCache,
-} from './setupManifest';
+} from '@/lib/setupManifest';
 
 afterEach(() => {
   resetSetupManifestCache();

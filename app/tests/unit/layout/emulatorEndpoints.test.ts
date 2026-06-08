@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeAzureServiceUrl } from './emulatorEndpoints';
+import { normalizeAzureServiceUrl } from '@/lib/emulatorEndpoints';
 
 describe('normalizeAzureServiceUrl', () => {
   it('appends account name to proxy root without account segment', () => {

@@ -181,7 +181,9 @@ cd app && pnpm install && pnpm run dev
 Vite proxies `/api/gcs`, `/api/s3`, and `/api/azure` to the emulators (see `app/vite.config.ts`).
 
 ```bash
-cd app && pnpm test
+cd app && pnpm test              # unit tests (tests/unit/)
+cd app && pnpm test:integration  # provider integration (tests/integration/)
+cd app && pnpm test:e2e          # Playwright (tests/e2e/)
 ```
 
 ## Architecture

@@ -1,5 +1,5 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
-import { AppShell } from './components/layout/AppShell';
+import { AppShell } from './features/layout/AppShell';
 import { useUrlState } from './hooks/useUrlState';
 import { useKeyboard } from './hooks/useKeyboard';
 import { useConnectionBootstrap } from './hooks/useConnectionBootstrap';

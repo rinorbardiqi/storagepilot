@@ -4,7 +4,7 @@ import {
   parseSnapshotManifest,
   SNAPSHOT_FORMAT_VERSION,
   snapshotManifestToJson,
-} from './snapshotManifest';
+} from '@/lib/snapshotManifest';
 
 describe('snapshotManifest', () => {
   it('round-trips manifest JSON', () => {

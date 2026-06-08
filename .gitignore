@@ -6,7 +6,9 @@ dist/
 .idea/
 .vscode/
 .data/
-.cursor/
+.cursor/*
+!.cursor/skills/
+!.cursor/skills/**
 
 data/gcs/*
 data/s3/*

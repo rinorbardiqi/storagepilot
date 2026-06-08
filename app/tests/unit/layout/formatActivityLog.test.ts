@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { formatActivityTarget } from './formatActivityLog';
-import type { ActivityEntry } from '../store/activityStore';
+import { formatActivityTarget } from '@/lib/formatActivityLog';
+import type { ActivityEntry } from '@/store/activityStore';
 
 function entry(overrides: Partial<ActivityEntry> & Pick<ActivityEntry, 'method' | 'args'>): ActivityEntry {
   return {

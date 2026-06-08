@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { ActivityEntry } from '../store/activityStore';
-import { extractBucketFromEntry } from '../lib/activityBucket';
+import type { ActivityEntry } from '@/store/activityStore';
+import { extractBucketFromEntry } from '@/lib/activityBucket';
 
 const base: Omit<ActivityEntry, 'method' | 'args'> = {
   id: '1',

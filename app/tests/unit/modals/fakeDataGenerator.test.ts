@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createFakeFile, parseSizeRange, FAKE_DATA_KINDS } from '../lib/fakeDataGenerator';
+import { createFakeFile, parseSizeRange, FAKE_DATA_KINDS } from '@/lib/fakeDataGenerator';
 
 describe('fakeDataGenerator', () => {
   it('creates JSON files with correct type and size', () => {

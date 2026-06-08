@@ -36,7 +36,11 @@
 | `app/src/api/` | Provider abstraction and adapters |
 | `app/src/store/` | Zustand stores |
 | `app/src/hooks/` | Data-fetching and URL sync hooks |
-| `app/src/components/` | UI components |
+| `app/src/features/` | UI by feature (`browser`, `layout`, `modals`, `detail`, `shared`, `views`) |
+| `app/src/lib/` | Pure utilities shared across features |
+| `app/tests/unit/` | Vitest unit tests, mirroring feature folders + `api/` |
+| `app/tests/integration/` | Vitest against real emulators (`api/`) |
+| `app/tests/e2e/` | Playwright specs |
 | `docker-compose*.yml` | Full stack, standalone, dev overlay |
 | `data/` | Emulator persistent volumes (gitignored) |
 

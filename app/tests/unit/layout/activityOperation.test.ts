@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { activityHttpVerb, matchesActivityFilter } from './activityOperation';
-import type { ActivityEntry } from '../store/activityStore';
+import { activityHttpVerb, matchesActivityFilter } from '@/lib/activityOperation';
+import type { ActivityEntry } from '@/store/activityStore';
 
 function entry(
   overrides: Partial<ActivityEntry> & Pick<ActivityEntry, 'method'>,

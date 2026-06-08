@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mapHttpStatusToError, parseStorageErrorBody } from './types';
+import { mapHttpStatusToError, parseStorageErrorBody } from '@/api/types';
 
 describe('parseStorageErrorBody', () => {
   it('extracts GCS JSON error messages', () => {

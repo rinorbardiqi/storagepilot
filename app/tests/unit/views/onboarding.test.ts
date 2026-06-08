@@ -3,7 +3,7 @@ import {
   DEFAULT_PROFILE_BY_TYPE,
   normalizeEnabledProviders,
   toggleProviderSelection,
-} from './providerSelection';
+} from '@/lib/providerSelection';
 
 describe('normalizeEnabledProviders', () => {
   it('keeps valid provider arrays', () => {
