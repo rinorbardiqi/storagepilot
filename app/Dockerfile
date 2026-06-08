@@ -56,7 +56,7 @@ RUN strip /usr/local/bin/minio /usr/local/bin/fake-gcs-server 2>/dev/null || tru
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY docker-nginx-render.sh /docker-nginx-render.sh
 COPY docker-entrypoint-full.sh /docker-entrypoint.d/40-storagepilot-full.sh
-COPY scripts/url-fetch-proxy.mjs /usr/local/bin/url-fetch-proxy.mjs
+COPY url-fetch-proxy.mjs /usr/local/bin/url-fetch-proxy.mjs
 RUN chmod +x /docker-nginx-render.sh /docker-entrypoint.d/40-storagepilot-full.sh /usr/local/bin/url-fetch-proxy.mjs
 VOLUME /data
 EXPOSE 80 9000
