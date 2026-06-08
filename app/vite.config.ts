@@ -1,7 +1,8 @@
 import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { defineConfig } from 'vite';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
@@ -20,6 +21,60 @@ function resolveGitBranch(): string {
 
 const gitBranch = resolveGitBranch();
 
+function urlFetchProxyPlugin(): Plugin {
+  return {
+    name: 'url-fetch-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/fetch', (req: IncomingMessage, res: ServerResponse, next) => {
+        if (req.method !== 'GET') {
+          next();
+          return;
+        }
+        void (async () => {
+          try {
+            const requestUrl = new URL(req.url ?? '/', 'http://127.0.0.1');
+            const target = requestUrl.searchParams.get('url');
+            if (!target) {
+              res.statusCode = 400;
+              res.end('Missing url parameter');
+              return;
+            }
+            let parsed: URL;
+            try {
+              parsed = new URL(target);
+            } catch {
+              res.statusCode = 400;
+              res.end('Invalid url parameter');
+              return;
+            }
+            if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+              res.statusCode = 400;
+              res.end('Only http(s) URLs are supported');
+              return;
+            }
+            const upstream = await fetch(target, { redirect: 'follow' });
+            if (!upstream.ok) {
+              res.statusCode = upstream.status;
+              res.end(`Upstream HTTP ${upstream.status}`);
+              return;
+            }
+            res.statusCode = 200;
+            res.setHeader(
+              'Content-Type',
+              upstream.headers.get('content-type') || 'application/octet-stream',
+            );
+            const body = Buffer.from(await upstream.arrayBuffer());
+            res.end(body);
+          } catch (err) {
+            res.statusCode = 502;
+            res.end(err instanceof Error ? err.message : 'Fetch failed');
+          }
+        })();
+      });
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => ({
   base: mode === 'marketing' ? './' : '/',
   resolve: {
@@ -27,7 +82,7 @@ export default defineConfig(({ mode }) => ({
       '@': resolve(__dirname, 'src'),
     },
   },
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), urlFetchProxyPlugin()],
   build: {
     rollupOptions: {
       input:
@@ -39,6 +94,11 @@ export default defineConfig(({ mode }) => ({
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),
     __GIT_BRANCH__: JSON.stringify(gitBranch),
+    // Keep in sync with app/Dockerfile emulator image pins
+    __EMULATOR_GCS_VERSION__: JSON.stringify('1.54.0'),
+    __EMULATOR_S3_VERSION__: JSON.stringify('RELEASE.2026-04-17T00-00-00Z'),
+    __EMULATOR_AZURE_VERSION__: JSON.stringify('3.35.0'),
+    __DOCKER_MODE__: JSON.stringify(process.env.VITE_DOCKER_MODE ?? 'dev'),
   },
   server: {
     port: 5173,

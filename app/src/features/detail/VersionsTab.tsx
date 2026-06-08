@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ObjectVersion } from '../../api/types';
 import { useConnectionStore } from '../../store/connectionStore';
+import { useModalStore } from '../../store/modalStore';
 import { useToast } from '../../hooks/useToast';
 import { formatBytes } from '../../lib/formatBytes';
 import { formatDate } from '../../lib/formatDate';
@@ -9,6 +10,7 @@ import { Button } from '../shared/Button';
 export function VersionsTab({ bucket, objectKey }: { bucket: string; objectKey: string }) {
   const getActiveProvider = useConnectionStore((s) => s.getActiveProvider);
   const providerType = useConnectionStore((s) => s.profiles.find((p) => p.id === s.activeProfileId)?.type);
+  const openModal = useModalStore((s) => s.openModal);
   const toast = useToast();
   const [versions, setVersions] = useState<ObjectVersion[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,16 +50,25 @@ export function VersionsTab({ bucket, objectKey }: { bucket: string; objectKey: 
     }
   };
 
-  const remove = async (versionId: string) => {
+  const remove = (versionId: string) => {
     const provider = getActiveProvider();
     if (!provider) return;
-    try {
-      await provider.deleteVersion(bucket, objectKey, versionId);
-      toast.success('Version deleted');
-      void refresh();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Delete failed');
-    }
+    openModal('bulkConfirm', {
+      count: 1,
+      label: `Delete version ${versionId.slice(0, 12)}…? This cannot be undone.`,
+      confirmLabel: 'Delete version',
+      onConfirm: () => {
+        void (async () => {
+          try {
+            await provider.deleteVersion(bucket, objectKey, versionId);
+            toast.success('Version deleted');
+            void refresh();
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Delete failed');
+          }
+        })();
+      },
+    });
   };
 
   if (loading) return <p className="text-sm text-[var(--text-muted)]">Loading versions…</p>;

@@ -195,8 +195,15 @@ export function Sidebar() {
                       aria-label={`Remove ${profile.name}`}
                       title="Remove connection"
                       onClick={() => {
-                        removeConnection(profile.id);
-                        toast.success(`Removed ${profile.name}`);
+                        openModal('bulkConfirm', {
+                          count: 1,
+                          label: `Remove connection "${profile.name}"? Saved credentials will be deleted.`,
+                          confirmLabel: 'Remove',
+                          onConfirm: () => {
+                            removeConnection(profile.id);
+                            toast.success(`Removed ${profile.name}`);
+                          },
+                        });
                       }}
                     >
                       <Trash2 size={11} />
@@ -312,13 +319,15 @@ export function Sidebar() {
               >
                 {DISPLAY_USER.name}
               </p>
-              <p
-                className="text-[10px] leading-[15px] text-[var(--text-muted)] truncate"
+              <button
+                type="button"
+                className="text-[10px] leading-[15px] text-[var(--text-muted)] truncate text-left hover:text-[var(--accent)] w-full"
                 style={{ fontFamily: 'var(--font-mono)' }}
                 title={activeProfile ? profileEndpoint(activeProfile) : undefined}
+                onClick={() => openModal('about')}
               >
                 {activeProfile ? profileEndpoint(activeProfile) : 'No connection'} · {apiVersionLabel()}
-              </p>
+              </button>
             </div>
             <button
               type="button"

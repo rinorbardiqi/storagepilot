@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { CloudUpload, File as FileIconLucide, FolderOpen, X } from 'lucide-react';
+import { fetchRemoteUrl } from '../../lib/fetchRemoteUrl';
 import { formatBytes } from '../../lib/formatBytes';
 import { useAppStore } from '../../store/appStore';
 import { useModalStore } from '../../store/modalStore';
@@ -32,9 +33,7 @@ export function UploadModal() {
     if (!url.trim() || !currentBucket) return;
     setBusy(true);
     try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
+      const blob = await fetchRemoteUrl(url.trim());
       const name = urlName.trim() || url.split('/').pop()?.split('?')[0] || 'download';
       const file = new File([blob], name, { type: blob.type || 'application/octet-stream' });
       addToQueue([
@@ -59,7 +58,11 @@ export function UploadModal() {
   };
 
   const onFiles = (files: FileList | null) => {
-    if (!files?.length || !currentBucket) return;
+    if (!files?.length) return;
+    if (!currentBucket) {
+      toast.error('Open a bucket first, then upload files.');
+      return;
+    }
     addToQueue(
       Array.from(files).map((file) => ({
         id: crypto.randomUUID(),

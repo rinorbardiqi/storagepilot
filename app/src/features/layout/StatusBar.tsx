@@ -2,6 +2,8 @@ import { ChevronUp, GitBranch, Globe, Server, Terminal } from 'lucide-react';
 import { useBuckets } from '../../hooks/useBuckets';
 import { useConnectionStore } from '../../store/connectionStore';
 import { useActivityStore } from '../../store/activityStore';
+import { useModalStore } from '../../store/modalStore';
+import { useTransferStore } from '../../store/transferStore';
 import { useUploadStore } from '../../store/uploadStore';
 import { useUiStore } from '../../store/uiStore';
 import { apiVersionLabel, GIT_BRANCH } from '../../lib/buildInfo';
@@ -23,12 +25,16 @@ export function StatusBar() {
 
   const activityOpen = useUiStore((s) => s.activityDrawerOpen);
   const toggleActivity = useUiStore((s) => s.toggleActivityDrawer);
+  const openModal = useModalStore((s) => s.openModal);
   const entries = useActivityStore((s) => s.entries);
   const uploadQueue = useUploadStore((s) => s.queue);
+  const activeJobCount = useTransferStore(
+    (s) => s.jobs.filter((j) => j.status === 'queued' || j.status === 'running').length,
+  );
 
   const pendingActivities = entries.filter((e) => e.status === 'pending').length;
   const activeUploads = uploadQueue.filter((i) => i.status === 'uploading').length;
-  const taskCount = pendingActivities + activeUploads;
+  const taskCount = pendingActivities + activeUploads + activeJobCount;
 
   const endpoint = profile ? profileEndpoint(profile) : statusHostLabel();
 
@@ -58,13 +64,18 @@ export function StatusBar() {
           Provider: {profile?.name ?? '—'}
         </span>
         <span className="text-[var(--border)] hidden md:inline">|</span>
-        <span className="inline-flex items-center gap-1.5 text-[var(--text-muted)] shrink-0">
+        <button
+          type="button"
+          className="inline-flex items-center gap-1.5 text-[var(--text-muted)] shrink-0 hover:text-[var(--accent)]"
+          onClick={() => openModal('about')}
+          title="About & diagnostics"
+        >
           <Server size={10} />
           {apiVersionLabel()}
           <span className={connected ? 'text-[var(--success)]' : 'text-[var(--warning)]'}>
             · {connected ? 'online' : status === 'checking' ? 'checking' : 'offline'}
           </span>
-        </span>
+        </button>
       </div>
 
       <button

@@ -94,6 +94,10 @@ if [ "$S3_ENABLED" = "1" ]; then
 
 fi
 
+# Same-origin proxy for Upload → From URL (avoids browser CORS on external images).
+node /usr/local/bin/url-fetch-proxy.mjs &
+PIDS="$PIDS $!"
+
 if [ "$AZURE_ENABLED" = "1" ]; then
   mkdir -p /data/azure
   azurite-blob \

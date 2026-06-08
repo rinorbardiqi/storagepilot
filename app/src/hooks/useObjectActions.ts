@@ -59,8 +59,23 @@ export function useObjectActions(onRefresh?: () => void) {
         onConfirm: () => {
           void (async () => {
             try {
+              const [meta, blob] = await Promise.all([
+                provider.getObjectMetadata(currentBucket, key).catch(() => null),
+                provider.getObject(currentBucket, key),
+              ]);
+              const filename = key.split('/').pop() ?? key;
+              const contentType =
+                meta?.contentType ?? (blob.type || 'application/octet-stream');
+              const file = new File([blob], filename, { type: contentType });
+
               await provider.deleteObject(currentBucket, key);
-              toast.success('Object deleted');
+              toast.undo('Object deleted', async () => {
+                await provider.uploadObject(currentBucket, key, file, {
+                  contentType,
+                  customMetadata: meta?.customMetadata,
+                });
+                onRefresh?.();
+              });
               onRefresh?.();
             } catch (err) {
               toast.error(err instanceof Error ? err.message : 'Delete failed');

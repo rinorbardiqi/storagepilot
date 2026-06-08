@@ -3,10 +3,10 @@ import { Activity, X } from 'lucide-react';
 import { useBuckets } from '../../hooks/useBuckets';
 import { usePerformanceMetrics, type OperationKind } from '../../hooks/usePerformanceMetrics';
 import { useAppStore } from '../../store/appStore';
-import { profileEndpoint } from '../../lib/providerAccent';
 import { isDefaultProfileId } from '../../lib/reconcileProfiles';
 import { useConnectionStore } from '../../store/connectionStore';
 import { useModalStore } from '../../store/modalStore';
+import { EmulatorHealthList } from '../shared/EmulatorHealthList';
 
 type TimeRange = 'live' | '1h' | '24h';
 
@@ -367,7 +367,6 @@ export function PerformanceMetricsModal() {
   const metrics = usePerformanceMetrics(RANGE_MS[range], bucketFilter);
 
   const profiles = useConnectionStore((s) => s.profiles);
-  const connectionStatus = useConnectionStore((s) => s.connectionStatus);
   const testConnection = useConnectionStore((s) => s.testConnection);
 
   const emulators = profiles.filter((p) => isDefaultProfileId(p.id));
@@ -551,35 +550,7 @@ export function PerformanceMetricsModal() {
               <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-muted)] mb-4">
                 Emulator Health
               </p>
-              <ul className="flex flex-col gap-2">
-                {emulators.map((p) => {
-                  const status = connectionStatus[p.id] ?? 'unconfigured';
-                  const healthy = status === 'connected';
-                  const endpoint = profileEndpoint(p);
-                  return (
-                    <li
-                      key={p.id}
-                      className="flex items-center justify-between p-3 border border-[var(--border)] bg-[var(--bg-base)] text-xs"
-                    >
-                      <span className="font-mono text-[var(--text-primary)]">
-                        {p.name}{' '}
-                        <span className="text-[var(--text-muted)]">({endpoint})</span>
-                      </span>
-                      <span
-                        className={`text-[10px] font-bold uppercase tracking-wider ${
-                          healthy ? 'text-[var(--success)]' : 'text-[var(--error)]'
-                        }`}
-                      >
-                        {status === 'checking'
-                          ? 'Checking…'
-                          : healthy
-                            ? 'Healthy'
-                            : 'Unavailable'}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
+              <EmulatorHealthList profileIds={emulators.map((p) => p.id)} />
             </div>
           </div>
         </div>

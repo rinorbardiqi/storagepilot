@@ -8,11 +8,8 @@ services:
       context: ./app
       target: full
     ports:
-      # Bind to 127.0.0.1 — on Windows, "localhost" may resolve to IPv6 (::1) and hit
-      # a different listener than Docker's 0.0.0.0 publish. Use http://127.0.0.1:3000
-      # if localhost hangs.
-      - "127.0.0.1:${PORT:-3000}:80"
-      - "127.0.0.1:9000:9000"
+      - "${PORT:-3000}:80"
+      - "9000:9000"
     volumes:
       - ./data:/data
     environment:

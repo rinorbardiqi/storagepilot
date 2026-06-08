@@ -2,6 +2,19 @@ import { sanitizeMethodArgs } from '../lib/uploadBody';
 import type { ActivityLogger } from './ActivityLogger';
 import type { StorageProvider } from './StorageProvider';
 
+function extractHttpStatus(err: unknown): number | undefined {
+  if (!err || typeof err !== 'object') return undefined;
+  const meta = (err as { $metadata?: { httpStatusCode?: number } }).$metadata;
+  if (typeof meta?.httpStatusCode === 'number') return meta.httpStatusCode;
+  if ('status' in err && typeof (err as { status: number }).status === 'number') {
+    return (err as { status: number }).status;
+  }
+  if ('statusCode' in err && typeof (err as { statusCode: number }).statusCode === 'number') {
+    return (err as { statusCode: number }).statusCode;
+  }
+  return undefined;
+}
+
 /** Sync helpers — must not be wrapped or callers receive Promises instead of values. */
 const SYNC_METHODS = new Set(['getObjectUrl', 'getPathFormats']);
 
@@ -56,6 +69,7 @@ export function instrument(provider: StorageProvider, logger: ActivityLogger): S
               status: 'error',
               duration: performance.now() - start,
               error: err instanceof Error ? err.message : String(err),
+              httpStatus: extractHttpStatus(err),
             });
             throw err;
           }

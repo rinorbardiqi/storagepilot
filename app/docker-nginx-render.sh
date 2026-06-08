@@ -88,6 +88,17 @@ EOF
   fi
 }
 
+fetch_block() {
+  cat <<'EOF'
+  location /api/fetch {
+    proxy_pass http://127.0.0.1:8099;
+    proxy_set_header Host $host;
+    proxy_read_timeout 120s;
+    proxy_send_timeout 120s;
+  }
+EOF
+}
+
 azure_block() {
   if [ "$AZURE_ENABLED" = "1" ]; then
     cat <<EOF
@@ -156,6 +167,7 @@ MIDDLE
   gcs_block
   s3_block
   azure_block
+  fetch_block
 
   echo '}'
 } > /etc/nginx/conf.d/default.conf

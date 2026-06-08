@@ -17,7 +17,8 @@ export type ModalId =
   | 'commandPalette'
   | 'devTools'
   | 'permissions'
-  | 'performanceMetrics';
+  | 'performanceMetrics'
+  | 'about';
 
 export interface ModalPayloads {
   connection: { profileId?: string; tab?: ProviderType; mode?: 'create' | 'edit' };
@@ -28,7 +29,7 @@ export interface ModalPayloads {
   cors: { bucket?: string };
   fakeData: { bucket?: string };
   snippet: { bucket: string; key: string; profileId?: string; operation?: 'download' | 'upload' | 'list' | 'delete' };
-  exportImport: { tab?: 'export' | 'import' };
+  exportImport: { tab?: 'export' | 'import'; buckets?: string[] };
   shortcuts: Record<string, never>;
   bulkConfirm: {
     count: number;
@@ -42,6 +43,7 @@ export interface ModalPayloads {
   devTools: Record<string, never>;
   permissions: { bucket: string };
   performanceMetrics: Record<string, never>;
+  about: Record<string, never>;
 }
 
 type OpenModal = <K extends ModalId>(id: K, payload?: ModalPayloads[K]) => void;

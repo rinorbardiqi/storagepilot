@@ -3,11 +3,13 @@ import { createPortal } from 'react-dom';
 import { useAppStore } from '../../store/appStore';
 import { useBuckets } from '../../hooks/useBuckets';
 import { useModalStore } from '../../store/modalStore';
+import { useUiStore } from '../../store/uiStore';
 
 export function CommandPalette() {
   const isOpen = useModalStore((s) => Boolean(s.active.commandPalette));
   const closeModal = useModalStore((s) => s.closeModal);
   const openModal = useModalStore((s) => s.openModal);
+  const openTransferCenter = useUiStore((s) => s.openTransferCenter);
   const setSearchQuery = useAppStore((s) => s.setSearchQuery);
   const setCurrentBucket = useAppStore((s) => s.setCurrentBucket);
   const currentBucket = useAppStore((s) => s.currentBucket);
@@ -33,6 +35,8 @@ export function CommandPalette() {
       },
       { group: 'Actions', label: 'Fake data generator', action: () => openModal('fakeData', currentBucket ? { bucket: currentBucket } : {}) },
       { group: 'Actions', label: 'Export / import', action: () => openModal('exportImport') },
+      { group: 'Actions', label: 'Open Transfer Center', action: () => openTransferCenter() },
+      { group: 'Actions', label: 'About & diagnostics', action: () => openModal('about') },
       { group: 'Actions', label: 'Connection settings', action: () => openModal('connection') },
       { group: 'Actions', label: 'Keyboard shortcuts', action: () => openModal('shortcuts') },
       { group: 'Search', label: 'Filter objects in browser', action: () => setSearchQuery(q) },

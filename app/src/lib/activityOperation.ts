@@ -104,3 +104,33 @@ export function activityFilterLabel(filter: ActivityFilter): string {
   if (filter === 'errors') return 'ERRORS';
   return filter.toUpperCase();
 }
+
+/** HTTP-style colors for the activity log filter bar (aligned with performance metrics). */
+export const ACTIVITY_FILTER_COLOR: Record<ActivityFilter, string> = {
+  all: 'var(--text-primary)',
+  get: 'var(--accent)',
+  post: 'var(--success)',
+  put: 'var(--warning)',
+  delete: 'var(--error)',
+  errors: 'var(--error)',
+};
+
+export function activityFilterButtonStyle(
+  filter: ActivityFilter,
+  active: boolean,
+): { color: string; backgroundColor?: string; border?: string } {
+  const color = ACTIVITY_FILTER_COLOR[filter];
+  if (!active) {
+    return {
+      color: filter === 'all' ? 'var(--text-muted)' : color,
+    };
+  }
+  if (filter === 'all') {
+    return { color, backgroundColor: 'var(--bg-elevated)' };
+  }
+  return {
+    color,
+    backgroundColor: `color-mix(in srgb, ${color} 18%, transparent)`,
+    border: `1px solid color-mix(in srgb, ${color} 38%, transparent)`,
+  };
+}

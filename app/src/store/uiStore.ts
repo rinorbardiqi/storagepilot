@@ -4,6 +4,14 @@ import type { StorageObject } from '../api/types';
 
 export type DetailTab = 'metadata' | 'preview' | 'versions';
 export type AppSection = 'explorer' | 'developer-tools';
+export type ActivityDrawerTab = 'api' | 'transfers';
+
+/** Comfortable height when the activity / transfer drawer is opened. */
+export const ACTIVITY_DRAWER_OPEN_HEIGHT = 280;
+
+function activityHeightOnOpen(current: number): number {
+  return current < ACTIVITY_DRAWER_OPEN_HEIGHT ? ACTIVITY_DRAWER_OPEN_HEIGHT : current;
+}
 
 interface UiState {
   detailPanelOpen: boolean;
@@ -12,6 +20,7 @@ interface UiState {
 
   activityDrawerOpen: boolean;
   activityDrawerHeight: number;
+  activityDrawerTab: ActivityDrawerTab;
   activityFilter: ActivityFilter;
   activitySearch: string;
   expandedActivityId: string | null;
@@ -33,6 +42,8 @@ interface UiState {
   setActivityDrawerOpen: (open: boolean) => void;
   toggleActivityDrawer: () => void;
   setActivityDrawerHeight: (height: number) => void;
+  setActivityDrawerTab: (tab: ActivityDrawerTab) => void;
+  openTransferCenter: () => void;
   setActivityFilter: (filter: ActivityFilter) => void;
   setActivitySearch: (q: string) => void;
   setExpandedActivityId: (id: string | null) => void;
@@ -54,7 +65,8 @@ export const useUiStore = create<UiState>()((set) => ({
   selectedObject: null,
 
   activityDrawerOpen: false,
-  activityDrawerHeight: 160,
+  activityDrawerHeight: ACTIVITY_DRAWER_OPEN_HEIGHT,
+  activityDrawerTab: 'api',
   activityFilter: 'all',
   activitySearch: '',
   expandedActivityId: null,
@@ -77,10 +89,32 @@ export const useUiStore = create<UiState>()((set) => ({
 
   setDetailTab: (detailTab) => set({ detailTab }),
 
-  setActivityDrawerOpen: (activityDrawerOpen) => set({ activityDrawerOpen }),
-  toggleActivityDrawer: () => set((s) => ({ activityDrawerOpen: !s.activityDrawerOpen })),
+  setActivityDrawerOpen: (activityDrawerOpen) =>
+    set((s) => ({
+      activityDrawerOpen,
+      activityDrawerHeight: activityDrawerOpen
+        ? activityHeightOnOpen(s.activityDrawerHeight)
+        : s.activityDrawerHeight,
+    })),
+  toggleActivityDrawer: () =>
+    set((s) => {
+      const opening = !s.activityDrawerOpen;
+      return {
+        activityDrawerOpen: opening,
+        activityDrawerHeight: opening
+          ? activityHeightOnOpen(s.activityDrawerHeight)
+          : s.activityDrawerHeight,
+      };
+    }),
   setActivityDrawerHeight: (activityDrawerHeight) =>
     set({ activityDrawerHeight: Math.min(480, Math.max(96, activityDrawerHeight)) }),
+  setActivityDrawerTab: (activityDrawerTab) => set({ activityDrawerTab }),
+  openTransferCenter: () =>
+    set((s) => ({
+      activityDrawerOpen: true,
+      activityDrawerTab: 'transfers' as const,
+      activityDrawerHeight: activityHeightOnOpen(s.activityDrawerHeight),
+    })),
 
   setActivityFilter: (activityFilter) => set({ activityFilter }),
   setActivitySearch: (activitySearch) => set({ activitySearch }),

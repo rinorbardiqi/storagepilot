@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   deleteBucketWithContents,
   emptyBucketContents,
+  isMissingBucketError,
 } from '@/api/providerHelpers';
+import { StorageError } from '@/api/types';
 import type { StorageProvider } from '@/api/StorageProvider';
 import type { StorageObject } from '@/api/types';
 
@@ -26,6 +28,14 @@ function mockProvider(
     ...overrides,
   };
 }
+
+describe('isMissingBucketError', () => {
+  it('detects NOT_FOUND and NoSuchBucket messages', () => {
+    expect(isMissingBucketError(new StorageError('NOT_FOUND', 'x', 'gcs'))).toBe(true);
+    expect(isMissingBucketError(new Error('listObjects: NoSuchBucket'))).toBe(true);
+    expect(isMissingBucketError(new Error('Forbidden'))).toBe(false);
+  });
+});
 
 describe('emptyBucketContents', () => {
   it('deletes all objects by re-listing until the bucket is empty', async () => {

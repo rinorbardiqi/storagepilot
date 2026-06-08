@@ -11,6 +11,7 @@ import {
   buildDestinationKey,
   transferObjects,
 } from "../../lib/transferService";
+import { useTransferStore } from "../../store/transferStore";
 import { Modal } from "../shared/Modal";
 import type { Bucket } from "../../api/types";
 
@@ -92,7 +93,7 @@ export function CopyMoveModal() {
     [payload?.sizes],
   );
 
-  const confirmTransfer = async () => {
+  const runTransfer = async () => {
     const source = getActiveProvider();
     const destination = getProviderForProfile(destProfileId);
     if (
@@ -120,50 +121,125 @@ export function CopyMoveModal() {
       }
 
       const sameBackend = !crossTarget && source.type === destination.type;
+      const transfer = useTransferStore.getState();
+      const jobId = transfer.createJob({
+        kind: operation,
+        label: `${operation === "copy" ? "Copy" : "Move"} ${planned.length} object(s) → ${destBucket}`,
+        sourceProfileId: activeProfileId ?? undefined,
+        destProfileId,
+        items: planned.map(({ key, dstKey }) => ({
+          key,
+          destKey: dstKey,
+          status: "pending" as const,
+        })),
+      });
+
+      let succeeded = 0;
+      let failed = 0;
 
       if (sameBackend && operation === "copy") {
         for (const { key, dstKey } of planned) {
-          await source.copyObject(
-            { bucket: currentBucket, key },
-            { bucket: destBucket, key: dstKey },
-          );
+          transfer.updateItem(jobId, key, { status: "running" });
+          setProgress(`${succeeded + failed + 1}/${planned.length}`);
+          try {
+            await source.copyObject(
+              { bucket: currentBucket, key },
+              { bucket: destBucket, key: dstKey },
+            );
+            transfer.updateItem(jobId, key, { status: "done" });
+            succeeded++;
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : "Copy failed";
+            transfer.updateItem(jobId, key, { status: "error", error: msg });
+            failed++;
+          }
         }
       } else if (sameBackend && operation === "move") {
         for (const { key, dstKey } of planned) {
-          await source.moveObject(
-            { bucket: currentBucket, key },
-            { bucket: destBucket, key: dstKey },
-          );
+          transfer.updateItem(jobId, key, { status: "running" });
+          setProgress(`${succeeded + failed + 1}/${planned.length}`);
+          try {
+            await source.moveObject(
+              { bucket: currentBucket, key },
+              { bucket: destBucket, key: dstKey },
+            );
+            transfer.updateItem(jobId, key, { status: "done" });
+            succeeded++;
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : "Move failed";
+            transfer.updateItem(jobId, key, { status: "error", error: msg });
+            failed++;
+          }
         }
       } else {
         const items = planned.map(({ key, dstKey }) => ({
           src: { bucket: currentBucket, key },
           dst: { bucket: destBucket, key: dstKey },
         }));
-        await transferObjects(source, destination, items, (p) => {
-          setProgress(`${p.completed + 1}/${p.total}`);
+        const result = await transferObjects(source, destination, items, {
+          onProgress: (p) => setProgress(`${p.completed + 1}/${p.total}`),
+          onItemComplete: (outcome) => {
+            transfer.updateItem(jobId, outcome.srcKey, {
+              status: outcome.success ? "done" : "error",
+              error: outcome.error,
+            });
+            if (outcome.success) succeeded++;
+            else failed++;
+          },
         });
+        succeeded = result.succeeded;
+        failed = result.failed;
         if (operation === "move") {
           for (const { key } of planned) {
-            await source.deleteObject(currentBucket, key);
+            const item = result.outcomes.find((o) => o.srcKey === key);
+            if (item?.success) {
+              try {
+                await source.deleteObject(currentBucket, key);
+              } catch {
+                /* source cleanup best-effort */
+              }
+            }
           }
         }
       }
 
+      if (failed === 0) transfer.finishJob(jobId, "done");
+      else if (succeeded > 0) transfer.finishJob(jobId, "partial");
+      else transfer.finishJob(jobId, "error");
+
       invalidateObjects();
       clearSelection();
-      toast.success(
-        `${operation === "copy" ? "Copied" : "Moved"} ${payload.keys.length} object(s)${
-          crossTarget ? ` to ${destProfile?.name ?? "destination"}` : ""
-        }`,
-      );
-      closeModal("copyMove");
+      if (failed === 0) {
+        toast.success(
+          `${operation === "copy" ? "Copied" : "Moved"} ${succeeded} object(s)${
+            crossTarget ? ` to ${destProfile?.name ?? "destination"}` : ""
+          }`,
+        );
+        closeModal("copyMove");
+      } else if (succeeded > 0) {
+        toast.warning(`${succeeded} succeeded, ${failed} failed — see Transfer Center`);
+      } else {
+        toast.error(`${operation} failed — see Transfer Center`);
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : `${operation} failed`);
     } finally {
       setBusy(false);
       setProgress("");
     }
+  };
+
+  const confirmTransfer = () => {
+    if (operation === 'move') {
+      useModalStore.getState().openModal('bulkConfirm', {
+        count: payload?.keys.length ?? 0,
+        label: `Move ${payload?.keys.length ?? 0} object(s)? Source objects will be deleted.`,
+        confirmLabel: 'Move',
+        onConfirm: () => void runTransfer(),
+      });
+      return;
+    }
+    void runTransfer();
   };
 
   const firstKey = payload?.keys[0];
@@ -195,7 +271,7 @@ export function CopyMoveModal() {
           <button
             type="button"
             disabled={!destBucket || busy}
-            onClick={() => void confirmTransfer()}
+            onClick={confirmTransfer}
             className="h-10 px-8 bg-[var(--accent-copy)] text-black text-xs font-bold uppercase tracking-wider hover:opacity-90 disabled:opacity-50"
           >
             {busy

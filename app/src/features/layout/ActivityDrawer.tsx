@@ -3,14 +3,18 @@ import { ChevronDown, Download, GripHorizontal } from 'lucide-react';
 import { formatActivityLine, formatActivityStatus, formatActivityTarget } from '../../lib/formatActivityLog';
 import {
   ACTIVITY_FILTERS,
+  activityFilterButtonStyle,
   activityFilterLabel,
   matchesActivityFilter,
 } from '../../lib/activityOperation';
 import { formatTime } from '../../lib/formatDate';
 import { useActivityStore } from '../../store/activityStore';
+import { useModalStore } from '../../store/modalStore';
+import { useTransferStore } from '../../store/transferStore';
 import { useUploadStore } from '../../store/uploadStore';
 import { useUiStore } from '../../store/uiStore';
 import { Button } from '../shared/Button';
+import { TransferJobsList } from './TransferJobsList';
 
 export function ActivityDrawer() {
   const isOpen = useUiStore((s) => s.activityDrawerOpen);
@@ -23,15 +27,22 @@ export function ActivityDrawer() {
   const setSearch = useUiStore((s) => s.setActivitySearch);
   const expandedId = useUiStore((s) => s.expandedActivityId);
   const setExpandedId = useUiStore((s) => s.setExpandedActivityId);
+  const drawerTab = useUiStore((s) => s.activityDrawerTab);
+  const setDrawerTab = useUiStore((s) => s.setActivityDrawerTab);
   const entries = useActivityStore((s) => s.entries);
   const clearLog = useActivityStore((s) => s.clearLog);
+  const openModal = useModalStore((s) => s.openModal);
   const uploadQueue = useUploadStore((s) => s.queue);
+  const activeJobCount = useTransferStore(
+    (s) => s.jobs.filter((j) => j.status === 'queued' || j.status === 'running').length,
+  );
 
   const dragRef = useRef<{ startY: number; startH: number } | null>(null);
 
   const pendingApi = entries.filter((e) => e.status === 'pending').length;
   const activeUploads = uploadQueue.filter((i) => i.status === 'uploading').length;
-  const activeCount = pendingApi + activeUploads;
+  const activeTransfers = activeJobCount;
+  const activeCount = pendingApi + activeUploads + activeTransfers;
 
   const filtered = entries.filter((e) => {
     if (!matchesActivityFilter(e, filter)) return false;
@@ -110,23 +121,32 @@ export function ActivityDrawer() {
             className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-primary)]"
             style={{ fontFamily: 'var(--font-ui)' }}
           >
-            Activity Log
+            {drawerTab === 'api' ? 'Activity Log' : 'Transfer Center'}
           </span>
           {activeCount > 0 && (
             <span className="text-[9px] text-[var(--success)] whitespace-nowrap" style={{ fontFamily: 'var(--font-mono)' }}>
-              ● {activeCount} transfer{activeCount !== 1 ? 's' : ''} active
+              ● {activeCount} active
             </span>
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            className="text-[9px] uppercase tracking-wider text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-            style={{ fontFamily: 'var(--font-mono)' }}
-            onClick={clearLog}
-          >
-            Clear log
-          </button>
+          {drawerTab === 'api' && (
+            <button
+              type="button"
+              className="text-[9px] uppercase tracking-wider text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+              style={{ fontFamily: 'var(--font-mono)' }}
+              onClick={() =>
+                openModal('bulkConfirm', {
+                  count: entries.length,
+                  label: `Clear ${entries.length} activity log entries?`,
+                  confirmLabel: 'Clear log',
+                  onConfirm: clearLog,
+                })
+              }
+            >
+              Clear log
+            </button>
+          )}
           <Button onClick={exportLog} className="!px-1.5 !py-0.5" title="Export log">
             <Download size={10} />
           </Button>
@@ -141,34 +161,64 @@ export function ActivityDrawer() {
         </div>
       </div>
 
-      <div className="flex items-center gap-1 px-3 py-2 border-b border-[var(--border)] flex-wrap bg-[var(--bg-base)] shrink-0">
-        {ACTIVITY_FILTERS.map((f) => (
-          <button
-            key={f}
-            type="button"
-            className={`px-2.5 py-1 text-[10px] uppercase tracking-wide transition-colors ${
-              filter === f
-                ? 'text-[var(--text-primary)] bg-[var(--bg-elevated)]'
-                : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
-            }`}
-            style={{ fontFamily: 'var(--font-mono)' }}
-            onClick={() => setFilter(f)}
-          >
-            {activityFilterLabel(f)}
-          </button>
-        ))}
-        <input
-          type="search"
-          placeholder="Filter by path, operation…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="flex-1 min-w-[140px] px-2 py-0.5 text-[10px] bg-[var(--bg-surface)] border border-[var(--border)] outline-none focus:border-[var(--accent)]"
-          style={{ fontFamily: 'var(--font-mono)' }}
-        />
+      <div className="border-b border-[var(--border)] bg-[var(--bg-base)] shrink-0">
+        <div className="flex items-center gap-1 px-3 py-2">
+          {(['api', 'transfers'] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              className={`px-2.5 py-1 text-[10px] uppercase tracking-wide transition-colors ${
+                drawerTab === t
+                  ? 'text-[var(--text-primary)] bg-[var(--bg-elevated)]'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+              }`}
+              style={{ fontFamily: 'var(--font-mono)' }}
+              onClick={() => setDrawerTab(t)}
+            >
+              {t === 'api' ? 'API Log' : 'Transfers'}
+            </button>
+          ))}
+        </div>
+        {drawerTab === 'api' && (
+          <div className="flex items-center gap-1 px-3 py-2 border-t border-[var(--border)] flex-wrap">
+            {ACTIVITY_FILTERS.map((f) => {
+              const isActive = filter === f;
+              const chipStyle = activityFilterButtonStyle(f, isActive);
+              return (
+                <button
+                  key={f}
+                  type="button"
+                  className={`px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors rounded-[var(--radius)] ${
+                    isActive ? '' : 'opacity-80 hover:opacity-100'
+                  }`}
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    color: chipStyle.color,
+                    backgroundColor: chipStyle.backgroundColor,
+                    border: chipStyle.border,
+                  }}
+                  onClick={() => setFilter(f)}
+                >
+                  {activityFilterLabel(f)}
+                </button>
+              );
+            })}
+            <input
+              type="search"
+              placeholder="Filter by path, operation…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="flex-1 min-w-[140px] px-2 py-0.5 text-[10px] bg-[var(--bg-surface)] border border-[var(--border)] outline-none focus:border-[var(--accent)]"
+              style={{ fontFamily: 'var(--font-mono)' }}
+            />
+          </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto min-h-0 p-2">
-        {filtered.length === 0 ? (
+        {drawerTab === 'transfers' ? (
+          <TransferJobsList />
+        ) : filtered.length === 0 ? (
           <p className="px-2 py-3 text-[10px] text-[var(--text-muted)]" style={{ fontFamily: 'var(--font-mono)' }}>
             {entries.length === 0
               ? 'No activity yet — browse buckets, open folders, or upload files to see operations here.'

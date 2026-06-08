@@ -11,6 +11,7 @@ import { useUiStore } from '../../store/uiStore';
 import { Button } from '../shared/Button';
 import { ProviderLogo } from '../shared/ProviderLogo';
 import { TroubleshootingPanel } from '../detail/TroubleshootingPanel';
+import { EmulatorHealthList } from '../shared/EmulatorHealthList';
 
 export function ProviderNotConnectedView() {
   const activeProfileId = useConnectionStore((s) => s.activeProfileId);
@@ -146,7 +147,17 @@ export function ProviderErrorView() {
           </div>
         </div>
       </div>
-      <TroubleshootingPanel />
+      <div className="w-80 shrink-0 border-l border-[var(--border)] bg-[var(--bg-surface)] p-4 overflow-y-auto">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-muted)] mb-3">
+          Connection diagnostics
+        </p>
+        {activeProfileId && (
+          <EmulatorHealthList profileIds={[activeProfileId]} compact />
+        )}
+        <div className="mt-4">
+          <TroubleshootingPanel />
+        </div>
+      </div>
     </div>
   );
 }

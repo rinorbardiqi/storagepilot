@@ -1,3 +1,4 @@
+import { AboutDiagnosticsModal } from './AboutDiagnosticsModal';
 import { BulkConfirmModal } from './BulkConfirmModal';
 import { CommandPalette } from './CommandPalette';
 import { ConnectionModal } from './ConnectionModal';
@@ -30,6 +31,7 @@ export function ModalHost() {
       <PermissionsModal />
       <ShortcutsModal />
       <BulkConfirmModal />
+      <AboutDiagnosticsModal />
       <NewFolderModal />
       <CommandPalette />
     </>

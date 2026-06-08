@@ -12,7 +12,9 @@ import {
   type SnapshotBucketEntry,
   type SnapshotObjectEntry,
 } from '../../lib/snapshotManifest';
+import { countImportablePaths, countImportOverwrites } from '../../lib/importHelpers';
 import { downloadAsZip } from '../../lib/zip';
+import { useTransferStore } from '../../store/transferStore';
 import { Button } from '../shared/Button';
 import { Modal } from '../shared/Modal';
 
@@ -21,6 +23,7 @@ export function ExportImportModal() {
   const isOpen = Boolean(active);
   const payload = typeof active === 'object' ? active : undefined;
   const closeModal = useModalStore((s) => s.closeModal);
+  const openModal = useModalStore((s) => s.openModal);
   const getActiveProvider = useConnectionStore((s) => s.getActiveProvider);
   const activeProfileId = useConnectionStore((s) => s.activeProfileId);
   const profiles = useConnectionStore((s) => s.profiles);
@@ -37,6 +40,9 @@ export function ExportImportModal() {
   useEffect(() => {
     if (isOpen) {
       setTab(payload?.tab ?? 'export');
+      if (payload?.buckets?.length) {
+        setSelected(new Set(payload.buckets));
+      }
     } else {
       // Clear import state when modal closes so reopening starts fresh.
       setImportFiles([]);
@@ -60,40 +66,56 @@ export function ExportImportModal() {
     if (!provider || !profile || !activeProfileId || selected.size === 0) return;
     setBusy(true);
     setProgress('');
+    const transfer = useTransferStore.getState();
+    const bucketList = [...selected];
+    const jobId = transfer.createJob({
+      kind: 'export',
+      label: `Export ${bucketList.length} bucket(s)`,
+      sourceProfileId: activeProfileId,
+      items: bucketList.map((name) => ({ key: name, status: 'pending' as const })),
+    });
     try {
       const files: Array<{ key: string; blob: Blob }> = [];
       const bucketEntries: SnapshotBucketEntry[] = [];
 
-      for (const bucketName of selected) {
+      for (const bucketName of bucketList) {
+        transfer.updateItem(jobId, bucketName, { status: 'running' });
         const objects: SnapshotObjectEntry[] = [];
         let token: string | undefined;
         let listed = 0;
-        do {
-          const page = await provider.listObjects(bucketName, { maxResults: 200, pageToken: token });
-          for (const obj of page.objects) {
-            if (obj.isFolder) continue;
-            listed++;
-            setProgress(`Exporting ${bucketName} (${listed})…`);
-            const meta = await provider.getObjectMetadata(bucketName, obj.key).catch(() => null);
-            const blob = await provider.getObject(bucketName, obj.key);
-            const zipPath = `${bucketName}/${obj.key}`;
-            files.push({ key: zipPath, blob });
-            objects.push({
-              key: obj.key,
-              contentType: meta?.contentType ?? obj.contentType ?? (blob.type || 'application/octet-stream'),
-              customMetadata: meta?.customMetadata,
-            });
-          }
-          token = page.nextPageToken;
-        } while (token);
-
-        let cors;
         try {
-          cors = await provider.getCorsRules(bucketName);
-        } catch {
-          cors = undefined;
+          do {
+            const page = await provider.listObjects(bucketName, { maxResults: 200, pageToken: token });
+            for (const obj of page.objects) {
+              if (obj.isFolder) continue;
+              listed++;
+              setProgress(`Exporting ${bucketName} (${listed})…`);
+              const meta = await provider.getObjectMetadata(bucketName, obj.key).catch(() => null);
+              const blob = await provider.getObject(bucketName, obj.key);
+              const zipPath = `${bucketName}/${obj.key}`;
+              files.push({ key: zipPath, blob });
+              objects.push({
+                key: obj.key,
+                contentType: meta?.contentType ?? obj.contentType ?? (blob.type || 'application/octet-stream'),
+                customMetadata: meta?.customMetadata,
+              });
+            }
+            token = page.nextPageToken;
+          } while (token);
+
+          let cors;
+          try {
+            cors = await provider.getCorsRules(bucketName);
+          } catch {
+            cors = undefined;
+          }
+          bucketEntries.push({ name: bucketName, cors, objects });
+          transfer.updateItem(jobId, bucketName, { status: 'done' });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : 'Export failed';
+          transfer.updateItem(jobId, bucketName, { status: 'error', error: msg });
+          throw err;
         }
-        bucketEntries.push({ name: bucketName, cors, objects });
       }
 
       const manifest = createSnapshotManifest(
@@ -103,9 +125,11 @@ export function ExportImportModal() {
         bucketEntries,
       );
       await downloadAsZip(files, 'storagepilot-snapshot.zip', snapshotManifestToJson(manifest));
+      transfer.finishJob(jobId, 'done');
       toast.success(`Exported snapshot with ${files.length} object(s)`);
       closeModal('exportImport');
     } catch (err) {
+      transfer.finishJob(jobId, 'error', err instanceof Error ? err.message : 'Export failed');
       toast.error(err instanceof Error ? err.message : 'Export failed');
     } finally {
       setBusy(false);
@@ -145,6 +169,15 @@ export function ExportImportModal() {
     const provider = getActiveProvider();
     if (!provider || importFiles.length === 0) return;
     setBusy(true);
+    const transfer = useTransferStore.getState();
+    const jobId = transfer.createJob({
+      kind: 'import',
+      label: `Import ${importFiles.length} file(s)`,
+      sourceProfileId: activeProfileId ?? undefined,
+      items: importFiles.map((f) => ({ key: f.path, status: 'pending' as const })),
+    });
+    let succeeded = 0;
+    let failed = 0;
     try {
       const metaByPath = new Map<string, SnapshotObjectEntry>();
       if (importManifest) {
@@ -176,17 +209,30 @@ export function ExportImportModal() {
         done++;
         setProgress(`Importing ${done}/${importFiles.length}…`);
         const slash = path.indexOf('/');
-        if (slash === -1) continue;
+        if (slash === -1) {
+          transfer.updateItem(jobId, path, { status: 'error', error: 'Invalid path' });
+          failed++;
+          continue;
+        }
         const bucket = path.slice(0, slash);
         const key = path.slice(slash + 1);
-        const meta = metaByPath.get(path);
-        const file = new File([blob], key.split('/').pop() ?? key, {
-          type: meta?.contentType ?? (blob.type || 'application/octet-stream'),
-        });
-        await provider.uploadObject(bucket, key, file, {
-          contentType: meta?.contentType,
-          customMetadata: meta?.customMetadata,
-        });
+        transfer.updateItem(jobId, path, { status: 'running' });
+        try {
+          const meta = metaByPath.get(path);
+          const file = new File([blob], key.split('/').pop() ?? key, {
+            type: meta?.contentType ?? (blob.type || 'application/octet-stream'),
+          });
+          await provider.uploadObject(bucket, key, file, {
+            contentType: meta?.contentType,
+            customMetadata: meta?.customMetadata,
+          });
+          transfer.updateItem(jobId, path, { status: 'done' });
+          succeeded++;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : 'Import failed';
+          transfer.updateItem(jobId, path, { status: 'error', error: msg });
+          failed++;
+        }
       }
 
       if (importManifest) {
@@ -201,15 +247,26 @@ export function ExportImportModal() {
         }
       }
 
-      toast.success(
-        importManifest
-          ? `Imported snapshot (${importManifest.profileName}, ${importFiles.length} objects)`
-          : `Imported ${importFiles.length} object(s)`,
-      );
-      closeModal('exportImport');
-      setImportFiles([]);
-      setImportManifest(null);
+      if (failed === 0) transfer.finishJob(jobId, 'done');
+      else if (succeeded > 0) transfer.finishJob(jobId, 'partial');
+      else transfer.finishJob(jobId, 'error');
+
+      if (failed === 0) {
+        toast.success(
+          importManifest
+            ? `Imported snapshot (${importManifest.profileName}, ${succeeded} objects)`
+            : `Imported ${succeeded} object(s)`,
+        );
+        closeModal('exportImport');
+        setImportFiles([]);
+        setImportManifest(null);
+      } else if (succeeded > 0) {
+        toast.warning(`${succeeded} imported, ${failed} failed — see Transfer Center`);
+      } else {
+        toast.error('Import failed — see Transfer Center');
+      }
     } catch (err) {
+      transfer.finishJob(jobId, 'error', err instanceof Error ? err.message : 'Import failed');
       toast.error(err instanceof Error ? err.message : 'Import failed');
     } finally {
       setBusy(false);
@@ -231,7 +288,36 @@ export function ExportImportModal() {
         ) : (
           <Button
             variant="primary"
-            onClick={() => void confirmImport()}
+            onClick={() => {
+              const provider = getActiveProvider();
+              if (!provider || importFiles.length === 0) return;
+              const importable = countImportablePaths(importFiles);
+              if (importable === 0) {
+                toast.error(
+                  'ZIP entries must use bucket/object paths (e.g. my-bucket/file.txt). Re-export from StoragePilot or add a bucket prefix to each file.',
+                );
+                return;
+              }
+              void (async () => {
+                try {
+                  const overwrites = await countImportOverwrites(provider, importFiles);
+                  if (overwrites > 0) {
+                    openModal('bulkConfirm', {
+                      count: overwrites,
+                      label: `Import will overwrite ${overwrites} existing object(s). Continue?`,
+                      confirmLabel: 'Import anyway',
+                      onConfirm: () => void confirmImport(),
+                    });
+                  } else {
+                    void confirmImport();
+                  }
+                } catch (err) {
+                  toast.error(
+                    err instanceof Error ? err.message : 'Could not check existing objects before import',
+                  );
+                }
+              })();
+            }}
             disabled={importFiles.length === 0 || busy}
           >
             {busy ? progress || 'Importing…' : `Import ${importFiles.length} file(s)`}

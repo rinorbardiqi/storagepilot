@@ -1,5 +1,20 @@
 import type { StorageProvider } from './StorageProvider';
+import { StorageError } from './types';
 import type { ObjectRef } from './types';
+
+/** True when listObjects failed because the bucket does not exist yet. */
+export function isMissingBucketError(err: unknown): boolean {
+  if (err instanceof StorageError && err.code === 'NOT_FOUND') return true;
+  if (err instanceof Error) {
+    const m = err.message.toLowerCase();
+    return (
+      m.includes('nosuchbucket') ||
+      m.includes('bucket does not exist') ||
+      m.includes('not found')
+    );
+  }
+  return false;
+}
 
 /** Default CORS max-age used by all providers when omitted. */
 export const DEFAULT_CORS_MAX_AGE = 3600;
