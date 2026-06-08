@@ -95,7 +95,7 @@ azure_block() {
     if (\$request_method = OPTIONS) {
       add_header Access-Control-Allow-Origin \$http_origin always;
       add_header Access-Control-Allow-Methods "GET, PUT, POST, DELETE, HEAD, OPTIONS" always;
-      add_header Access-Control-Allow-Headers "Authorization, Content-Type, Content-Length, x-ms-date, x-ms-version, x-ms-blob-type, x-ms-copy-source, x-ms-meta-*" always;
+      add_header Access-Control-Allow-Headers "Authorization, Content-Type, Content-Length, x-ms-date, x-ms-version, x-ms-blob-type, x-ms-blob-content-type, x-ms-copy-source, x-ms-meta-*" always;
       add_header Access-Control-Max-Age 86400 always;
       add_header Content-Length 0;
       return 204;

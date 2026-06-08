@@ -22,7 +22,9 @@ docker run -d \
   rinorbardiqi/storagepilot:full
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://127.0.0.1:3000](http://127.0.0.1:3000) (or [http://localhost:3000](http://localhost:3000)).
+
+> **Windows:** If `localhost:3000` hangs, use `127.0.0.1:3000` instead. Docker Desktop can leave a stale IPv6 listener on `[::1]:3000` that does not forward to the container.
 
 Default MinIO credentials: `storagepilot` / `storagepilot`
 

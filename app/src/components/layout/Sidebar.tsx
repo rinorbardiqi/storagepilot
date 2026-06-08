@@ -24,6 +24,7 @@ import { useUiStore } from '../../store/uiStore';
 import { useMainView } from '../../hooks/useMainView';
 import { ProviderLogo } from '../shared/ProviderLogo';
 import { SectionLabel } from '../shared/SectionLabel';
+import { ConnectionStringsPanel } from './ConnectionStringsPanel';
 
 function NavItem({
   icon: Icon,
@@ -207,6 +208,10 @@ export function Sidebar() {
           </div>
 
           <div className="flex-1 overflow-y-auto p-2">
+            <ConnectionStringsPanel
+              profiles={visibleProfiles}
+              activeProfileId={activeProfileId}
+            />
             <SectionLabel
               className="px-2 py-1.5"
               action={

@@ -242,10 +242,13 @@ export function OnboardingView() {
   const autoAppliedRef = useRef(false);
 
   useEffect(() => {
-    if (loading || availableProviders.length !== 1 || autoAppliedRef.current) return;
+    if (loading || autoAppliedRef.current) return;
+    const autoConnect =
+      availableProviders.length === 1 || manifest?.deployment === 'bundled';
+    if (!autoConnect) return;
     autoAppliedRef.current = true;
     applyOnboardingSources(availableProviders, manifest);
-  }, [loading, availableKey, manifestKey]);
+  }, [loading, availableKey, manifestKey, manifest]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -272,7 +275,10 @@ export function OnboardingView() {
     );
   }
 
-  if (availableProviders.length === 1) {
+  if (
+    availableProviders.length === 1 ||
+    manifest?.deployment === 'bundled'
+  ) {
     return (
       <div className="flex-1 flex items-center justify-center text-sm text-[var(--text-muted)]">
         Connecting…

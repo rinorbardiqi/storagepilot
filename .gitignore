@@ -18,6 +18,7 @@ data/azure/*
 coverage/
 playwright-report/
 test-results/
+demo-videos/
 *.tsbuildinfo
 
 .DS_Store

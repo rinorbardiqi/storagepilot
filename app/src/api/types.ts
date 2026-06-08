@@ -104,6 +104,26 @@ export class StorageError extends Error {
   }
 }
 
+/** Extract a human-readable message from GCS/S3/Azure error bodies. */
+export function parseStorageErrorBody(text: string): string | undefined {
+  const trimmed = text.trim();
+  if (!trimmed) return undefined;
+
+  try {
+    const json = JSON.parse(trimmed) as {
+      error?: { message?: string };
+      message?: string;
+    };
+    if (json.error?.message) return json.error.message;
+    if (json.message) return json.message;
+  } catch {
+    const xmlMessage = trimmed.match(/<Message>([^<]+)<\/Message>/i)?.[1];
+    if (xmlMessage) return xmlMessage;
+  }
+
+  return trimmed.length > 200 ? `${trimmed.slice(0, 200)}…` : trimmed;
+}
+
 export function mapHttpStatusToError(
   status: number,
   provider: ProviderType,
@@ -115,7 +135,7 @@ export function mapHttpStatusToError(
   if (status === 401 || status === 403) {
     return new StorageError('FORBIDDEN', message ?? 'Forbidden', provider);
   }
-  if (status === 409) {
+  if (status === 409 || status === 412) {
     return new StorageError('CONFLICT', message ?? 'Conflict', provider);
   }
   return new StorageError('UNKNOWN', message ?? `HTTP ${status}`, provider);
@@ -130,7 +150,9 @@ export async function fetchWithError(
     const res = await fetch(url, init);
     if (!res.ok) {
       const text = await res.text().catch(() => '');
-      throw mapHttpStatusToError(res.status, provider, text || res.statusText);
+      const message =
+        parseStorageErrorBody(text) || res.statusText || `HTTP ${res.status}`;
+      throw mapHttpStatusToError(res.status, provider, message);
     }
     return res;
   } catch (err) {

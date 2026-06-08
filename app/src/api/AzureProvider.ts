@@ -1,5 +1,6 @@
 import { computeBucketStats } from '../lib/bucketStats';
 import { prepareBucketName } from '../lib/bucketName';
+import { assertUploadBlob } from '../lib/uploadBody';
 import { appendAzureQuery } from './azureQuery';
 import { buildPathFormats } from '../lib/pathFormatters';
 import { encodeObjectKey } from '../lib/objectKey';
@@ -111,7 +112,9 @@ export class AzureProvider implements StorageProvider {
       return res;
     } catch (err) {
       if (err instanceof StorageError) throw err;
-      throw new StorageError('CONNECTION_FAILED', 'Connection failed', 'azure', err);
+      const detail =
+        err instanceof Error && err.message ? `: ${err.message}` : '';
+      throw new StorageError('CONNECTION_FAILED', `Connection failed${detail}`, 'azure', err);
     }
   }
 
@@ -233,8 +236,13 @@ export class AzureProvider implements StorageProvider {
     file: File,
     opts?: UploadOpts,
   ): Promise<void> {
+    assertUploadBlob(file);
     const url = this.objectUrl(container, key);
-    const metaHeaders: Record<string, string> = {};
+    const metaHeaders: Record<string, string> = {
+      // Azurite/nginx hang on large Put Blob when Content-Type is video/* — send octet-stream.
+      'Content-Type': 'application/octet-stream',
+      'x-ms-blob-type': 'BlockBlob',
+    };
     if (opts?.customMetadata) {
       for (const [k, v] of Object.entries(opts.customMetadata)) {
         metaHeaders[`x-ms-meta-${k}`] = v;
@@ -242,11 +250,7 @@ export class AzureProvider implements StorageProvider {
     }
     await this.request(url, {
       method: 'PUT',
-      headers: {
-        'Content-Type': opts?.contentType ?? (file.type || 'application/octet-stream'),
-        'x-ms-blob-type': 'BlockBlob',
-        ...metaHeaders,
-      },
+      headers: metaHeaders,
       body: file,
     });
     opts?.onProgress?.(100, file.size);

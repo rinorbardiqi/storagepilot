@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Info, MousePointer2, Trash2, X } from 'lucide-react';
 import type { BucketStats } from '../../api/types';
+import { useDeleteBucket } from '../../hooks/useDeleteBucket';
 import { providerScheme } from '../../lib/providerDisplay';
 import { formatBytes } from '../../lib/formatBytes';
 import { useAppStore } from '../../store/appStore';
@@ -8,7 +9,6 @@ import { useConnectionStore } from '../../store/connectionStore';
 import { useModalStore } from '../../store/modalStore';
 import { useUiStore } from '../../store/uiStore';
 import { useBuckets } from '../../hooks/useBuckets';
-import { useToast } from '../../hooks/useToast';
 
 export function PropertiesPanel() {
   const open = useUiStore((s) => s.propertiesPanelOpen);
@@ -20,7 +20,7 @@ export function PropertiesPanel() {
   const openModal = useModalStore((s) => s.openModal);
   const getActiveProvider = useConnectionStore((s) => s.getActiveProvider);
   const { refresh } = useBuckets();
-  const toast = useToast();
+  const { confirmDeleteBucket } = useDeleteBucket();
   const closeBucketDetail = useUiStore((s) => s.closeBucketDetail);
 
   const [stats, setStats] = useState<BucketStats | null>(null);
@@ -57,24 +57,10 @@ export function PropertiesPanel() {
 
   const deleteBucket = () => {
     if (!currentBucket) return;
-    const provider = getActiveProvider();
-    if (!provider) return;
-    openModal('bulkConfirm', {
-      count: 1,
-      label: `Delete bucket "${currentBucket}" and all its objects? This cannot be undone.`,
-      onConfirm: () => {
-        void (async () => {
-          try {
-            await provider.deleteBucket(currentBucket);
-            closeBucketDetail();
-            useAppStore.getState().setCurrentBucket(null);
-            toast.success(`Bucket "${currentBucket}" deleted`);
-            await refresh();
-          } catch (err) {
-            toast.error(err instanceof Error ? err.message : 'Failed to delete bucket');
-          }
-        })();
-      },
+    confirmDeleteBucket(currentBucket, async () => {
+      closeBucketDetail();
+      useAppStore.getState().setCurrentBucket(null);
+      await refresh();
     });
   };
 

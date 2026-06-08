@@ -30,7 +30,13 @@ export interface ModalPayloads {
   snippet: { bucket: string; key: string; profileId?: string; operation?: 'download' | 'upload' | 'list' | 'delete' };
   exportImport: { tab?: 'export' | 'import' };
   shortcuts: Record<string, never>;
-  bulkConfirm: { count: number; label: string; onConfirm: () => void };
+  bulkConfirm: {
+    count: number;
+    label: string;
+    onConfirm: () => void | Promise<void>;
+    confirmLabel?: string;
+    loadingLabel?: string;
+  };
   newFolder: { bucket: string; prefix: string };
   commandPalette: Record<string, never>;
   devTools: Record<string, never>;

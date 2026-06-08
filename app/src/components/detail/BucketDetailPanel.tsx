@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import type { BucketStats } from '../../api/types';
 import { useBuckets } from '../../hooks/useBuckets';
-import { useToast } from '../../hooks/useToast';
+import { useDeleteBucket } from '../../hooks/useDeleteBucket';
 import { useAppStore } from '../../store/appStore';
 import { useConnectionStore } from '../../store/connectionStore';
 import { useModalStore } from '../../store/modalStore';
@@ -55,7 +55,7 @@ export function BucketDetailPanel() {
   const profiles = useConnectionStore((s) => s.profiles);
   const profile = profiles.find((p) => p.id === activeProfileId);
   const { buckets, refresh: refreshBuckets } = useBuckets();
-  const toast = useToast();
+  const { confirmDeleteBucket } = useDeleteBucket();
   const [stats, setStats] = useState<BucketStats | null>(null);
   const [loadingStats, setLoadingStats] = useState(false);
 
@@ -91,24 +91,10 @@ export function BucketDetailPanel() {
 
   const deleteBucket = () => {
     if (!bucket) return;
-    const provider = getActiveProvider();
-    if (!provider) return;
-    openModal('bulkConfirm', {
-      count: 1,
-      label: `Delete bucket "${bucket.name}" and all its objects? This cannot be undone.`,
-      onConfirm: () => {
-        void (async () => {
-          try {
-            await provider.deleteBucket(bucket.name);
-            closeBucketDetail();
-            useUiStore.getState().setSelectedBucketInList(null);
-            toast.success(`Bucket "${bucket.name}" deleted`);
-            await refreshBuckets();
-          } catch (err) {
-            toast.error(err instanceof Error ? err.message : 'Failed to delete bucket');
-          }
-        })();
-      },
+    confirmDeleteBucket(bucket.name, async () => {
+      closeBucketDetail();
+      useUiStore.getState().setSelectedBucketInList(null);
+      await refreshBuckets();
     });
   };
 
@@ -174,7 +160,7 @@ export function BucketDetailPanel() {
                   className="text-[10px] uppercase leading-[15px] text-[var(--text-muted)] mb-1"
                   style={{ fontFamily: 'var(--font-mono)' }}
                 >
-                  Total Size
+                  Storage Used
                 </p>
                 <p className="text-xs font-semibold leading-4 text-[var(--text-primary)]">
                   {loadingStats ? '…' : stats ? formatBytes(stats.totalSize) : '—'}

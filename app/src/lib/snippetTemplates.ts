@@ -476,6 +476,180 @@ export function generateSnippet(
   }
 }
 
+/** Client-only setup snippets for sidebar / quick copy (no bucket operations). */
+export function generateConnectionInitSnippet(
+  language: SnippetLanguage,
+  profile: ConnectionProfile,
+): string {
+  switch (profile.type) {
+    case 'gcs':
+      return gcsConnectionInit(language, profile);
+    case 's3':
+      return s3ConnectionInit(language, profile);
+    case 'azure':
+      return azureConnectionInit(language, profile);
+  }
+}
+
+function gcsConnectionInit(language: SnippetLanguage, profile: ConnectionProfile): string {
+  const endpoint = gcsEndpoint(profile);
+  const emulatorHost = gcsEmulatorHost(profile);
+
+  switch (language) {
+    case 'cli':
+      return `export STORAGE_EMULATOR_HOST=${emulatorHost}`;
+    case 'node':
+      return [
+        '// npm install @google-cloud/storage',
+        "const { Storage } = require('@google-cloud/storage');",
+        '',
+        'const storage = new Storage({',
+        `  apiEndpoint: ${q(endpoint)},`,
+        "  projectId: 'test-project',",
+        '});',
+      ].join('\n');
+    case 'python':
+      return [
+        '# pip install google-cloud-storage',
+        'import os',
+        `os.environ["STORAGE_EMULATOR_HOST"] = ${q(endpoint)}`,
+        '',
+        'from google.cloud import storage',
+        "client = storage.Client(project='test-project')",
+      ].join('\n');
+    case 'go':
+      return [
+        '// go get cloud.google.com/go/storage',
+        'import (',
+        '  "cloud.google.com/go/storage"',
+        '  "google.golang.org/api/option"',
+        ')',
+        '',
+        `client, err := storage.NewClient(ctx, option.WithEndpoint(${q(endpoint)}))`,
+      ].join('\n');
+    case 'java':
+      return [
+        '// Maven: com.google.cloud:google-cloud-storage',
+        'Storage storage = StorageOptions.newBuilder()',
+        `    .setHost(${q(endpoint)})`,
+        "    .setProjectId('test-project')",
+        '    .build()',
+        '    .getService();',
+      ].join('\n');
+  }
+}
+
+function s3ConnectionInit(language: SnippetLanguage, profile: ConnectionProfile): string {
+  const endpoint = s3Endpoint(profile);
+  const accessKey = profile.s3AccessKey ?? 'storagepilot';
+  const secretKey = profile.s3SecretKey ?? 'storagepilot';
+  const region = profile.s3Region ?? 'us-east-1';
+
+  switch (language) {
+    case 'cli':
+      return `aws --endpoint-url ${endpoint} s3 ls`;
+    case 'node':
+      return [
+        '// npm install @aws-sdk/client-s3',
+        "const { S3Client } = require('@aws-sdk/client-s3');",
+        '',
+        'const client = new S3Client({',
+        `  endpoint: ${q(endpoint)},`,
+        `  region: ${q(region)},`,
+        '  credentials: {',
+        `    accessKeyId: ${q(accessKey)},`,
+        `    secretAccessKey: ${q(secretKey)},`,
+        '  },',
+        '  forcePathStyle: true,',
+        '});',
+      ].join('\n');
+    case 'python':
+      return [
+        '# pip install boto3',
+        'import boto3',
+        '',
+        's3 = boto3.client(',
+        "  's3',",
+        `  endpoint_url=${q(endpoint)},`,
+        `  aws_access_key_id=${q(accessKey)},`,
+        `  aws_secret_access_key=${q(secretKey)},`,
+        `  region_name=${q(region)},`,
+        ')',
+      ].join('\n');
+    case 'go':
+      return [
+        '// go get github.com/aws/aws-sdk-go-v2/service/s3',
+        `endpoint := ${q(endpoint)}`,
+        `cfg, _ := config.LoadDefaultConfig(ctx, config.WithRegion(${q(region)}))`,
+        'client := s3.NewFromConfig(cfg, func(o *s3.Options) {',
+        '  o.BaseEndpoint = aws.String(endpoint)',
+        '  o.UsePathStyle = true',
+        '})',
+      ].join('\n');
+    case 'java':
+      return [
+        '// Maven: software.amazon.awssdk:s3',
+        'S3Client s3 = S3Client.builder()',
+        `    .endpointOverride(URI.create(${q(endpoint)}))`,
+        `    .region(Region.of(${q(region)}))`,
+        '    .credentialsProvider(StaticCredentialsProvider.create(',
+        '        AwsBasicCredentials.create(',
+        `            ${q(accessKey)},`,
+        `            ${q(secretKey)}`,
+        '        )',
+        '    ))',
+        '    .forcePathStyle(true)',
+        '    .build();',
+      ].join('\n');
+  }
+}
+
+function azureConnectionInit(language: SnippetLanguage, profile: ConnectionProfile): string {
+  const account = azureAccount(profile);
+  const accountKey = azureAccountKey(profile);
+  const blobServiceUrl = azureBlobServiceUrl(profile);
+  const connectionString = azureConnectionString(profile);
+
+  switch (language) {
+    case 'cli':
+      return [
+        'az storage blob list \\',
+        `  --account-name ${account} \\`,
+        `  --account-key ${q(accountKey)} \\`,
+        `  --blob-endpoint ${q(blobServiceUrl)}`,
+      ].join('\n');
+    case 'node':
+      return [
+        '// npm install @azure/storage-blob',
+        "const { BlobServiceClient } = require('@azure/storage-blob');",
+        '',
+        `const client = BlobServiceClient.fromConnectionString(${q(connectionString)});`,
+      ].join('\n');
+    case 'python':
+      return [
+        '# pip install azure-storage-blob',
+        'from azure.storage.blob import BlobServiceClient',
+        '',
+        `client = BlobServiceClient.from_connection_string(${q(connectionString)})`,
+      ].join('\n');
+    case 'go':
+      return [
+        '// go get github.com/Azure/azure-sdk-for-go/sdk/storage/azblob',
+        `client, err := azblob.NewClientWithSharedKey(${q(blobServiceUrl)}, &azblob.SharedKeyCredential{`,
+        `  AccountName: ${q(account)},`,
+        `  AccountKey:  ${q(accountKey)},`,
+        '}, nil)',
+      ].join('\n');
+    case 'java':
+      return [
+        '// Maven: com.azure:azure-storage-blob',
+        `BlobServiceClient client = new BlobServiceClientBuilder()`,
+        `    .connectionString(${q(connectionString)})`,
+        '    .buildClient();',
+      ].join('\n');
+  }
+}
+
 /** Generate snippets from a saved profile — no live provider connection required. */
 export function generateSnippetForProfile(
   language: SnippetLanguage,
