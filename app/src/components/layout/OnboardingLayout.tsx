@@ -37,7 +37,7 @@ export function OnboardingLayout({
     <div className="flex flex-col h-screen bg-[var(--bg-base)]">
       <header className="flex items-center h-16 px-8 border-b border-[var(--border)] bg-[var(--bg-surface)] shrink-0">
         <div className="w-[464px] max-w-[30%]">
-          <Link to="/" className="inline-block hover:opacity-90 transition-opacity" title="Back to home">
+          <Link to="/gcs" className="inline-block hover:opacity-90 transition-opacity" title="Bucket list">
             <StoragePilotLogo />
           </Link>
         </div>

@@ -7,6 +7,8 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
 RUN corepack enable && pnpm install --frozen-lockfile
 COPY . .
+# App-only bundle — landing page is built separately (`pnpm run build:marketing`).
+ENV VITE_SITE_MODE=app
 RUN pnpm run build
 
 # Emulator binaries (pinned versions for reproducible multi-arch builds)

@@ -18,7 +18,7 @@ export function TopBar() {
 
   return (
     <header className="flex items-center h-[var(--topbar-height)] px-4 border-b border-[var(--border)] bg-[var(--bg-surface)] shrink-0">
-      <Link to="/" className="hover:opacity-90 transition-opacity" title="Back to home">
+      <Link to="/gcs" className="hover:opacity-90 transition-opacity" title="Bucket list">
         <StoragePilotLogo />
       </Link>
 

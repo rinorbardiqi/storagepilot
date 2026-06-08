@@ -1,5 +1,6 @@
 import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
@@ -22,6 +23,14 @@ const gitBranch = resolveGitBranch();
 export default defineConfig(({ mode }) => ({
   base: mode === 'marketing' ? './' : '/',
   plugins: [react(), tailwindcss()],
+  build: {
+    rollupOptions: {
+      input:
+        mode === 'marketing'
+          ? resolve(__dirname, 'index.marketing.html')
+          : resolve(__dirname, 'index.html'),
+    },
+  },
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),
     __GIT_BRANCH__: JSON.stringify(gitBranch),

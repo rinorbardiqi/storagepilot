@@ -3,7 +3,7 @@ export const SITE_TAGLINE = 'Local Cloud Storage Browser';
 export const SITE_DESCRIPTION =
   'Unified open-source web UI for local GCS, S3, and Azure storage emulators. One Docker pull, zero CORS headaches.';
 
-/** Landing-only deploy: no live app routes, CTAs point to self-host instructions. */
+/** True only for `pnpm run build:marketing` — never set in Docker / Hub images. */
 export const IS_MARKETING_SITE = import.meta.env.VITE_SITE_MODE === 'marketing';
 
 export const GITHUB_REPO_URL = 'https://github.com/rinorbardiqi/storagepilot';
