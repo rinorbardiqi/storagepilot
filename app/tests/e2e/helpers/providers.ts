@@ -91,7 +91,7 @@ export async function openBucket(page: Page, bucketName: string): Promise<void> 
 export async function uploadFile(
   page: Page,
   filePath: string,
-  fileName: string,
+  _fileName: string,
 ): Promise<void> {
   await page.locator('main').getByRole('button', { name: 'Upload', exact: true }).first().click();
   await page.getByRole('dialog', { name: 'Upload Objects' }).waitFor();

@@ -18,7 +18,7 @@ const demoVideoPath = join(
 );
 
 const test = base.extend({
-  page: async ({ browser }, use) => {
+  page: async ({ browser }, runWithPage) => {
     mkdirSync(dirname(demoVideoPath), { recursive: true });
     const context = await browser.newContext({
       recordVideo: {
@@ -28,7 +28,7 @@ const test = base.extend({
       viewport: { width: 1920, height: 1080 },
     });
     const page = await context.newPage();
-    await use(page);
+    await runWithPage(page);
     const video = page.video();
     await context.close();
     if (!video) return;
