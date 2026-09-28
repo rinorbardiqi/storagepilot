@@ -17,9 +17,15 @@ server {
 
   location /api/gcs/ {
     set $gcs_upstream ${GCS_URL};
+    # fake-gcs reads any Host other than its -public-host as a virtual-hosted
+    # bucket name, so path-style public reads (/bucket/key) 404 unless we send it.
+    set $gcs_host $http_host;
+    if ($uri !~ ^/api/gcs/(storage|upload|download|batch|_internal)/) {
+      set $gcs_host localhost:4443;
+    }
     rewrite ^/api/gcs/(.*)$ /$1 break;
     proxy_pass $gcs_upstream;
-    proxy_set_header Host $http_host;
+    proxy_set_header Host $gcs_host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_request_buffering off;
     proxy_buffering off;

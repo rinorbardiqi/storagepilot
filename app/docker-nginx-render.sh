@@ -39,11 +39,57 @@ export AZURE_URL="${AZURE_URL:-$AZURE_DEFAULT}"
 gcs_block() {
   if [ "$GCS_ENABLED" = "1" ]; then
     cat <<EOF
-  location /api/gcs/ {
+  # JSON API metadata. fake-gcs builds selfLink/mediaLink from its own address
+  # (127.0.0.1:4443) or the Host it saw, never with our /api/gcs prefix, so SDKs
+  # that follow those links fail. Rewrite them to the address the client used.
+  location ~ ^/api/gcs/(storage|upload|batch)/ {
+    # Object bytes must never pass through sub_filter (it would edit JSON files).
+    if (\$arg_alt = media) {
+      rewrite ^/api/gcs/(.*)$ /__gcs_raw/\$1 last;
+    }
     set \$gcs_upstream ${GCS_URL};
     rewrite ^/api/gcs/(.*)$ /\$1 break;
     proxy_pass \$gcs_upstream;
     proxy_set_header Host \$http_host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header Accept-Encoding "";
+    proxy_request_buffering off;
+    proxy_buffering off;
+    client_max_body_size 5G;
+    proxy_read_timeout 300s;
+    proxy_send_timeout 300s;
+    sub_filter_types application/json;
+    sub_filter_once off;
+    sub_filter '://127.0.0.1:4443/' '://\$http_host/api/gcs/';
+    sub_filter '://localhost:4443/' '://\$http_host/api/gcs/';
+    sub_filter '://\$http_host/storage/' '://\$http_host/api/gcs/storage/';
+    sub_filter '://\$http_host/download/' '://\$http_host/api/gcs/download/';
+    sub_filter '://\$http_host/upload/' '://\$http_host/api/gcs/upload/';
+  }
+
+  location /__gcs_raw/ {
+    internal;
+    set \$gcs_upstream ${GCS_URL};
+    rewrite ^/__gcs_raw/(.*)$ /\$1 break;
+    proxy_pass \$gcs_upstream;
+    proxy_set_header Host \$http_host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_buffering off;
+    proxy_read_timeout 300s;
+  }
+
+  # Raw object reads: /download/... and path-style public URLs (/bucket/key).
+  location /api/gcs/ {
+    set \$gcs_upstream ${GCS_URL};
+    # fake-gcs reads any Host other than its -public-host as a virtual-hosted
+    # bucket name, so path-style public reads (/bucket/key) 404 unless we send it.
+    set \$gcs_host \$http_host;
+    if (\$uri !~ ^/api/gcs/(download|_internal)/) {
+      set \$gcs_host ${GCS_PUBLIC_HOST:-localhost:4443};
+    }
+    rewrite ^/api/gcs/(.*)$ /\$1 break;
+    proxy_pass \$gcs_upstream;
+    proxy_set_header Host \$gcs_host;
     proxy_set_header X-Real-IP \$remote_addr;
     proxy_request_buffering off;
     proxy_buffering off;
