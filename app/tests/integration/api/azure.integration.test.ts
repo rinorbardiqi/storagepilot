@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AzureProvider } from '@/api/AzureProvider';
+import { deleteBucketWithContents } from '@/api/providerHelpers';
 import { AZURITE_ACCOUNT_KEY } from '@/lib/emulatorEndpoints';
 
 const AZURITE_UP = process.env.AZURITE_INTEGRATION === '1' || process.env.STORAGEPILOT_INTEGRATION === '1';
@@ -14,6 +15,17 @@ function proxyProvider() {
 }
 
 describe.skipIf(!AZURITE_UP)('AzureProvider integration', () => {
+  // Own container so these tests don't depend on whatever Azurite already holds.
+  const container = `sp-test-azver-${Date.now().toString(36)}`;
+  beforeAll(async () => {
+    const provider = proxyProvider();
+    await provider.createBucket(container);
+    await provider.uploadObject(container, 'export-1.csv', new File(['a,b\n1,2\n'], 'export-1.csv', { type: 'text/csv' }));
+  });
+  afterAll(async () => {
+    await deleteBucketWithContents(proxyProvider(), container).catch(() => undefined);
+  });
+
   it('connects via nginx proxy URL', async () => {
     await expect(proxyProvider().listBuckets()).resolves.toEqual(expect.any(Array));
   });
@@ -30,10 +42,7 @@ describe.skipIf(!AZURITE_UP)('AzureProvider integration', () => {
 
   it('listVersions with include=versions authenticates via proxy', async () => {
     const provider = proxyProvider();
-    const bucket = (await provider.listBuckets())[0]?.name;
-    expect(bucket).toBeTruthy();
-
-    const versions = await provider.listVersions(bucket!, `missing-${Date.now()}.txt`);
+    const versions = await provider.listVersions(container, `missing-${Date.now()}.txt`);
     expect(versions).toEqual([]);
   });
 
@@ -53,15 +62,7 @@ describe.skipIf(!AZURITE_UP)('AzureProvider integration', () => {
 
   it('listVersions returns current blob when object exists', async () => {
     const provider = proxyProvider();
-    const bucket = (await provider.listBuckets())[0]?.name;
-    expect(bucket).toBeTruthy();
-
-    const objects = await provider.listObjects(bucket!);
-    const obj = objects.objects.find((o) => !o.isFolder && o.key === 'export-1.csv') ??
-      objects.objects.find((o) => !o.isFolder);
-    if (!obj) return;
-
-    const versions = await provider.listVersions(bucket!, obj.key);
+    const versions = await provider.listVersions(container, 'export-1.csv');
     expect(versions.length).toBeGreaterThanOrEqual(1);
     expect(versions.some((v) => v.isLatest)).toBe(true);
   }, 15000);
