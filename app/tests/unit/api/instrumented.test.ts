@@ -69,4 +69,31 @@ describe('instrument', () => {
     expect(result).toBeInstanceOf(Promise);
     await result;
   });
+
+  it('runs every concurrent write, even for the same method', async () => {
+    const provider = mockProvider();
+    const wrapped = instrument(provider, nullLogger);
+    await Promise.all([
+      wrapped.deleteObject('b', 'one.txt'),
+      wrapped.deleteObject('b', 'two.txt'),
+    ]);
+    expect(provider.deleteObject).toHaveBeenCalledTimes(2);
+    expect(provider.deleteObject).toHaveBeenCalledWith('b', 'two.txt');
+  });
+
+  it('does not share results between reads with different arguments', async () => {
+    const provider = mockProvider();
+    provider.getObject = vi.fn(async (_bucket: string, key: string) => new Blob([key]));
+    const wrapped = instrument(provider, nullLogger);
+    const [a, b] = await Promise.all([wrapped.getObject('b', 'a'), wrapped.getObject('b', 'bb')]);
+    expect(a.size).toBe(1);
+    expect(b.size).toBe(2);
+  });
+
+  it('coalesces identical concurrent list calls', async () => {
+    const provider = mockProvider();
+    const wrapped = instrument(provider, nullLogger);
+    await Promise.all([wrapped.listBuckets(), wrapped.listBuckets()]);
+    expect(provider.listBuckets).toHaveBeenCalledTimes(1);
+  });
 });

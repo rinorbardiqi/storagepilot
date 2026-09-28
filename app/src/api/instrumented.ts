@@ -18,11 +18,22 @@ function extractHttpStatus(err: unknown): number | undefined {
 /** Sync helpers — must not be wrapped or callers receive Promises instead of values. */
 const SYNC_METHODS = new Set(['getObjectUrl', 'getPathFormats']);
 
-/** Coalesce concurrent identical calls (guards against effect dependency loops). */
-const INFLIGHT = new Map<string, Promise<unknown>>();
+/**
+ * Read-only methods whose concurrent identical calls are coalesced (guards against
+ * effect dependency loops). Writes are never coalesced — each call must run.
+ */
+const COALESCED_METHODS = new Set(['testConnection', 'listBuckets', 'listObjects', 'getBucketStats', 'getCorsRules']);
 
-function inflightKey(provider: string, method: string): string {
-  return `${provider}:${method}`;
+/** In-flight calls per provider instance, keyed by method + arguments. */
+const INFLIGHT = new WeakMap<StorageProvider, Map<string, Promise<unknown>>>();
+
+function inflightKey(method: string, args: unknown[]): string | null {
+  if (!COALESCED_METHODS.has(method)) return null;
+  try {
+    return `${method}:${JSON.stringify(args)}`;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -41,8 +52,13 @@ export function instrument(provider: StorageProvider, logger: ActivityLogger): S
 
       return async (...args: unknown[]) => {
         const method = String(prop);
-        const key = inflightKey(target.type, method);
-        const pending = INFLIGHT.get(key);
+        const key = inflightKey(method, args);
+        let inflight = INFLIGHT.get(target);
+        if (!inflight) {
+          inflight = new Map();
+          INFLIGHT.set(target, inflight);
+        }
+        const pending = key ? inflight.get(key) : undefined;
         if (pending) return pending;
 
         const run = (async () => {
@@ -75,11 +91,12 @@ export function instrument(provider: StorageProvider, logger: ActivityLogger): S
           }
         })();
 
-        INFLIGHT.set(key, run);
+        if (!key) return run;
+        inflight.set(key, run);
         try {
           return await run;
         } finally {
-          if (INFLIGHT.get(key) === run) INFLIGHT.delete(key);
+          if (inflight.get(key) === run) inflight.delete(key);
         }
       };
     },
