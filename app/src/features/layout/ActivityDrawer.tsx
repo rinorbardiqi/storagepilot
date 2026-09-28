@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
+import { downloadBlob } from '../../lib/download';
 import { ChevronDown, Download, GripHorizontal } from 'lucide-react';
 import { formatActivityLine, formatActivityStatus, formatActivityTarget } from '../../lib/formatActivityLog';
 import {
@@ -62,12 +63,7 @@ export function ActivityDrawer() {
   const exportLog = () => {
     const lines = entries.map((e) => formatActivityLine(e));
     const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `activity-log-${Date.now()}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadBlob(blob, `activity-log-${Date.now()}.txt`);
   };
 
   const onDragStart = useCallback(

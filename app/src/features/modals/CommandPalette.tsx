@@ -24,7 +24,9 @@ export function CommandPalette() {
       { group: 'Actions', label: 'New bucket', action: () => openModal('newBucket') },
       { group: 'Actions', label: 'Developer tools hub', action: () => openModal('devTools') },
       { group: 'Actions', label: 'Performance metrics', action: () => openModal('performanceMetrics') },
-      { group: 'Actions', label: 'Bucket stats', action: () => currentBucket && openModal('stats', { bucket: currentBucket }) },
+      ...(currentBucket
+        ? [{ group: 'Actions', label: 'Bucket stats', action: () => openModal('stats', { bucket: currentBucket }) }]
+        : []),
       {
         group: 'Actions',
         label: 'CORS editor',
@@ -39,8 +41,13 @@ export function CommandPalette() {
       { group: 'Actions', label: 'About & diagnostics', action: () => openModal('about') },
       { group: 'Actions', label: 'Connection settings', action: () => openModal('connection') },
       { group: 'Actions', label: 'Keyboard shortcuts', action: () => openModal('shortcuts') },
-      { group: 'Search', label: 'Filter objects in browser', action: () => setSearchQuery(q) },
     ];
+    // Search needs an open bucket and a query; it is always offered then, rather than
+    // being filtered out because its label doesn't contain the typed text.
+    const searchItems =
+      currentBucket && query.trim()
+        ? [{ group: 'Search', label: `Search "${query.trim()}" in ${currentBucket}`, action: () => setSearchQuery(query.trim()) }]
+        : [];
     const bucketItems = buckets
       .filter((b) => !q || b.name.toLowerCase().includes(q))
       .map((b) => ({
@@ -48,8 +55,12 @@ export function CommandPalette() {
         label: b.name,
         action: () => setCurrentBucket(b.name),
       }));
-    return [...actions.filter((a) => !q || a.label.toLowerCase().includes(q)), ...bucketItems];
-  }, [query, buckets, openModal, setCurrentBucket, setSearchQuery, currentBucket]);
+    return [
+      ...actions.filter((a) => !q || a.label.toLowerCase().includes(q)),
+      ...searchItems,
+      ...bucketItems,
+    ];
+  }, [query, buckets, openModal, openTransferCenter, setCurrentBucket, setSearchQuery, currentBucket]);
 
   useEffect(() => {
     if (!isOpen) {

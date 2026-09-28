@@ -88,6 +88,11 @@ export function CopyMoveModal() {
     };
   }, [active, destProfileId, getProviderForProfile]);
 
+  // Keys already carry the folder being browsed; the destination prefix replaces it,
+  // otherwise copying from "photos/" into "photos/" yields "photos/photos/…".
+  const relativeKey = (key: string) =>
+    currentPrefix && key.startsWith(currentPrefix) ? key.slice(currentPrefix.length) : key;
+
   const totalSize = useMemo(
     () => payload?.sizes?.reduce((sum, n) => sum + n, 0) ?? 0,
     [payload?.sizes],
@@ -110,10 +115,10 @@ export function CopyMoveModal() {
     try {
       const planned = payload.keys.map((key) => ({
         key,
-        dstKey: buildDestinationKey(key, destPrefix, preservePath),
+        dstKey: buildDestinationKey(relativeKey(key), destPrefix, preservePath),
       }));
       const samePlace = planned.filter(
-        (p) => currentBucket === destBucket && p.key === p.dstKey,
+        (p) => !crossTarget && currentBucket === destBucket && p.key === p.dstKey,
       );
       if (samePlace.length) {
         toast.error("Destination matches source — choose a different bucket or path");
@@ -246,7 +251,7 @@ export function CopyMoveModal() {
   const firstName = firstKey?.split("/").pop() ?? "";
   const previewKey =
     firstKey && destBucket
-      ? buildDestinationKey(firstKey, destPrefix, preservePath)
+      ? buildDestinationKey(relativeKey(firstKey), destPrefix, preservePath)
       : "";
   const pathParts = previewKey.split("/").filter(Boolean).slice(0, -1);
 
@@ -387,7 +392,7 @@ export function CopyMoveModal() {
               checked={preservePath}
               onChange={(e) => setPreservePath(e.target.checked)}
             />
-            Preserve full object path (uncheck to use filename only)
+            Preserve sub-folder path (uncheck to use filename only)
           </label>
         </div>
 

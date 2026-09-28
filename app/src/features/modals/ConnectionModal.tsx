@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ProviderType } from '../../api/types';
 import type { ConnectionProfile } from '../../api/providerFactory';
 import {
@@ -58,6 +58,12 @@ export function ConnectionModal() {
   const [azureAccountKey, setAzureAccountKey] = useState('');
 
   const isOpen = Boolean(active);
+  // Profile created by this modal session (e.g. by "Test connection"), so a later
+  // test or save updates it instead of adding another copy.
+  const createdIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isOpen) createdIdRef.current = null;
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -106,17 +112,18 @@ export function ConnectionModal() {
       }
     };
 
-    if (isCreate) {
+    if (isCreate && !createdIdRef.current) {
       const id = crypto.randomUUID();
       const profile = profileFromForm(tab, values, id);
       addProfile(profile);
+      createdIdRef.current = id;
       setActiveProfile(id);
       enableProvider();
       completeOnboarding();
       return id;
     }
 
-    const id = editingProfile?.id ?? payload?.profileId;
+    const id = createdIdRef.current ?? editingProfile?.id ?? payload?.profileId;
     if (!id) return '';
     updateProfile(id, profileFromForm(tab, values, id));
     setActiveProfile(id);

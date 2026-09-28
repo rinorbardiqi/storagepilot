@@ -26,14 +26,17 @@ export function AboutDiagnosticsModal() {
   const enabledProviders = usePreferencesStore((s) => s.enabledProviders);
   const toast = useToast();
 
+  // Test once per open. Depending on connectionStatus here would retest every time a
+  // test finished as "disconnected", hammering unreachable endpoints in a loop.
   useEffect(() => {
     if (!isOpen) return;
-    for (const p of profiles) {
-      if (connectionStatus[p.id] !== 'connected') {
+    const status = useConnectionStore.getState().connectionStatus;
+    for (const p of useConnectionStore.getState().profiles) {
+      if (status[p.id] !== 'connected' && status[p.id] !== 'checking') {
         void testConnection(p.id);
       }
     }
-  }, [isOpen, profiles, connectionStatus, testConnection]);
+  }, [isOpen, testConnection]);
 
   const copyDiagnostics = async () => {
     const payload = buildDiagnosticsPayload({

@@ -54,7 +54,7 @@ export function BulkConfirmModal() {
               {loading ? (
                 <>
                   <Loader2 size={14} className="animate-spin" />
-                  Deleting…
+                  Working…
                 </>
               ) : (
                 payload.confirmLabel ?? 'Confirm'

@@ -5,6 +5,7 @@ import { useAppStore } from '../store/appStore';
 import { useConnectionStore } from '../store/connectionStore';
 import { useModalStore } from '../store/modalStore';
 import { useSelectionStore } from '../store/selectionStore';
+import { useUiStore } from '../store/uiStore';
 import { useToast } from './useToast';
 
 export function useObjectActions(onRefresh?: () => void) {
@@ -13,6 +14,9 @@ export function useObjectActions(onRefresh?: () => void) {
   const toast = useToast();
   const openModal = useModalStore((s) => s.openModal);
   const clearSelection = useSelectionStore((s) => s.clearSelection);
+  const invalidateObjects = useAppStore((s) => s.invalidateObjects);
+  // Callers like the detail panel pass no refresh; still reload the listing after changes.
+  const refreshList = onRefresh ?? invalidateObjects;
 
   const downloadOne = useCallback(
     async (key: string) => {
@@ -74,9 +78,11 @@ export function useObjectActions(onRefresh?: () => void) {
                   contentType,
                   customMetadata: meta?.customMetadata,
                 });
-                onRefresh?.();
+                refreshList();
               });
-              onRefresh?.();
+              const ui = useUiStore.getState();
+              if (ui.selectedObject?.key === key) ui.closeDetail();
+              refreshList();
             } catch (err) {
               toast.error(err instanceof Error ? err.message : 'Delete failed');
             }
@@ -84,7 +90,7 @@ export function useObjectActions(onRefresh?: () => void) {
         },
       });
     },
-    [getActiveProvider, currentBucket, openModal, toast, onRefresh],
+    [getActiveProvider, currentBucket, openModal, toast, refreshList],
   );
 
   const deleteSelected = useCallback(
@@ -96,21 +102,32 @@ export function useObjectActions(onRefresh?: () => void) {
         label: `Delete ${keys.length} object${keys.length !== 1 ? 's' : ''}? This cannot be undone.`,
         onConfirm: () => {
           void (async () => {
-            try {
-              for (const key of keys) {
+            // Keep going past failures so one bad key doesn't strand the rest,
+            // and always refresh — some objects may already be gone.
+            let deleted = 0;
+            let lastError: unknown;
+            for (const key of keys) {
+              try {
                 await provider.deleteObject(currentBucket, key);
+                deleted++;
+              } catch (err) {
+                lastError = err;
               }
-              clearSelection();
-              toast.success(`Deleted ${keys.length} object(s)`);
-              onRefresh?.();
-            } catch (err) {
-              toast.error(err instanceof Error ? err.message : 'Bulk delete failed');
+            }
+            clearSelection();
+            refreshList();
+            const failed = keys.length - deleted;
+            if (failed === 0) {
+              toast.success(`Deleted ${deleted} object(s)`);
+            } else {
+              const reason = lastError instanceof Error ? `: ${lastError.message}` : '';
+              toast.error(`Deleted ${deleted} of ${keys.length}; ${failed} failed${reason}`);
             }
           })();
         },
       });
     },
-    [getActiveProvider, currentBucket, openModal, toast, onRefresh, clearSelection],
+    [getActiveProvider, currentBucket, openModal, toast, refreshList, clearSelection],
   );
 
   return { downloadOne, downloadSelected, deleteOne, deleteSelected };

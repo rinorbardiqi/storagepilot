@@ -364,7 +364,7 @@ export function PerformanceMetricsModal() {
   const [range, setRange] = useState<TimeRange>('live');
   const [bucketFilter, setBucketFilter] = useState<string | null>(null);
 
-  const metrics = usePerformanceMetrics(RANGE_MS[range], bucketFilter);
+  const metrics = usePerformanceMetrics(RANGE_MS[range], bucketFilter, isOpen);
 
   const profiles = useConnectionStore((s) => s.profiles);
   const testConnection = useConnectionStore((s) => s.testConnection);

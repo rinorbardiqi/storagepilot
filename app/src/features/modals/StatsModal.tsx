@@ -18,13 +18,24 @@ export function StatsModal() {
     if (!payload?.bucket) return;
     const provider = getActiveProvider();
     if (!provider) return;
+    let cancelled = false;
+    setStats(null);
     setLoading(true);
     setError(null);
     void provider
       .getBucketStats(payload.bucket)
-      .then(setStats)
-      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load stats'))
-      .finally(() => setLoading(false));
+      .then((s) => {
+        if (!cancelled) setStats(s);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load stats');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [payload?.bucket, getActiveProvider]);
 
   const breakdown = stats

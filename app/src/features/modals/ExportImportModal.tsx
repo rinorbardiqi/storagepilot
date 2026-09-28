@@ -15,6 +15,8 @@ import {
 import { countImportablePaths, countImportOverwrites } from '../../lib/importHelpers';
 import { downloadAsZip } from '../../lib/zip';
 import { useTransferStore } from '../../store/transferStore';
+import { useAppStore } from '../../store/appStore';
+import { refreshBuckets } from '../../store/bucketStore';
 import { Button } from '../shared/Button';
 import { Modal } from '../shared/Modal';
 
@@ -250,6 +252,10 @@ export function ExportImportModal() {
       if (failed === 0) transfer.finishJob(jobId, 'done');
       else if (succeeded > 0) transfer.finishJob(jobId, 'partial');
       else transfer.finishJob(jobId, 'error');
+
+      // Import may create buckets and objects the open views don't know about yet.
+      void refreshBuckets();
+      useAppStore.getState().invalidateObjects();
 
       if (failed === 0) {
         toast.success(

@@ -3,8 +3,11 @@ export function downloadBlob(blob: Blob, filename: string): void {
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  a.remove();
+  // Revoking synchronously can cancel the download in Firefox/Safari.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 export function filenameFromKey(key: string): string {

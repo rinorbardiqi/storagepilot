@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { extractBucketFromEntry } from '../lib/activityBucket';
 import { classifyOperation, type OperationKind } from '../lib/activityOperation';
 import type { ActivityEntry } from '../store/activityStore';
@@ -19,12 +19,23 @@ function filterByBucket(entries: ActivityEntry[], bucket: string | null) {
   return entries.filter((e) => extractBucketFromEntry(e) === bucket);
 }
 
-export function usePerformanceMetrics(liveWindowMs = 60_000, bucketFilter: string | null = null) {
+export function usePerformanceMetrics(
+  liveWindowMs = 60_000,
+  bucketFilter: string | null = null,
+  enabled = true,
+) {
   const entries = useActivityStore((s) => s.entries);
+  // Advance the window even when no new requests arrive, so old traffic ages out.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!enabled) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [enabled]);
 
   return useMemo(() => {
     const scoped = filterByBucket(entries, bucketFilter);
-    const now = Date.now();
     const recent = entriesInWindow(scoped, now - liveWindowMs, now);
     const prior = entriesInWindow(scoped, now - liveWindowMs * 2, now - liveWindowMs);
 
@@ -103,5 +114,5 @@ export function usePerformanceMetrics(liveWindowMs = 60_000, bucketFilter: strin
       bucketsInLog,
       hasData: scoped.length > 0,
     };
-  }, [entries, liveWindowMs, bucketFilter]);
+  }, [entries, liveWindowMs, bucketFilter, now]);
 }

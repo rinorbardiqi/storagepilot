@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CorsRule } from '../../api/types';
 import { useBuckets } from '../../hooks/useBuckets';
 import { useConnectionStore } from '../../store/connectionStore';
@@ -33,11 +33,38 @@ export function CorsEditorModal() {
   const providerType = provider?.type;
   const readOnly = providerType === 'azure' || providerType === 'gcs';
 
+  // Pick the bucket once per open; a bucket-list refresh must not undo the user's choice.
+  const initializedRef = useRef(false);
   useEffect(() => {
-    if (!active) return;
-    const initial = payload?.bucket ?? buckets[0]?.name ?? '';
-    setBucket(initial);
+    if (!active) {
+      initializedRef.current = false;
+      return;
+    }
+    if (!initializedRef.current) {
+      initializedRef.current = true;
+      setBucket(payload?.bucket ?? buckets[0]?.name ?? '');
+      return;
+    }
+    setBucket((prev) => prev || buckets[0]?.name || '');
   }, [active, payload?.bucket, buckets]);
+
+  /** Switch editors, carrying edits across so neither view saves stale rules. */
+  const switchMode = (raw: boolean) => {
+    if (raw === rawMode) return;
+    if (raw) {
+      setRawJson(JSON.stringify(rules, null, 2));
+    } else {
+      try {
+        const parsed = JSON.parse(rawJson) as unknown;
+        if (!Array.isArray(parsed)) throw new Error('CORS JSON must be an array of rules');
+        setRules(parsed as CorsRule[]);
+      } catch (err) {
+        toast.error(err instanceof Error ? `Invalid JSON: ${err.message}` : 'Invalid JSON');
+        return;
+      }
+    }
+    setRawMode(raw);
+  };
 
   useEffect(() => {
     if (!bucket || !activeProfileId) {
@@ -73,8 +100,9 @@ export function CorsEditorModal() {
     if (!provider || !bucket || readOnly) return;
     setSaving(true);
     try {
-      const toSave = rawMode ? (JSON.parse(rawJson) as CorsRule[]) : rules;
-      await provider.setCorsRules(bucket, toSave);
+      const toSave = rawMode ? (JSON.parse(rawJson) as unknown) : rules;
+      if (!Array.isArray(toSave)) throw new Error('CORS JSON must be an array of rules');
+      await provider.setCorsRules(bucket, toSave as CorsRule[]);
       toast.success('CORS rules saved');
       closeModal('cors');
     } catch (err) {
@@ -149,10 +177,10 @@ export function CorsEditorModal() {
       {bucket && !loading && (
         <>
           <div className="flex gap-2 mb-4">
-            <Button variant={rawMode ? 'ghost' : 'primary'} onClick={() => setRawMode(false)}>
+            <Button variant={rawMode ? 'ghost' : 'primary'} onClick={() => switchMode(false)}>
               Visual
             </Button>
-            <Button variant={rawMode ? 'primary' : 'ghost'} onClick={() => setRawMode(true)}>
+            <Button variant={rawMode ? 'primary' : 'ghost'} onClick={() => switchMode(true)}>
               JSON
             </Button>
             {!readOnly && !rawMode && (

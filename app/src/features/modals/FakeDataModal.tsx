@@ -17,6 +17,13 @@ import { Button } from '../shared/Button';
 import { Input } from '../shared/Input';
 import { Modal } from '../shared/Modal';
 
+/** Expand `{n}`; without it every file would get the same key and overwrite the last. */
+function fileNameFromPattern(pattern: string, n: number): string {
+  if (pattern.includes('{n}')) return pattern.replaceAll('{n}', String(n));
+  const dot = pattern.lastIndexOf('.');
+  return dot > 0 ? `${pattern.slice(0, dot)}-${n}${pattern.slice(dot)}` : `${pattern}-${n}`;
+}
+
 export function FakeDataModal() {
   const isOpen = useModalStore((s) => Boolean(s.active.fakeData));
   const closeModal = useModalStore((s) => s.closeModal);
@@ -32,6 +39,7 @@ export function FakeDataModal() {
   const { buckets, loading: bucketsLoading } = useBuckets();
   const toast = useToast();
   const openedRef = useRef(false);
+  const initializedRef = useRef(false);
 
   const [selectedBucket, setSelectedBucket] = useState<string>('');
   const [kind, setKind] = useState<FakeDataKind>('json');
@@ -55,12 +63,20 @@ export function FakeDataModal() {
     if (connectionStatus === 'connected') void refreshBuckets();
   }, [isOpen, connectionStatus]);
 
+  // Initialise once per open; later bucket-list refreshes must not undo the user's choices.
   useEffect(() => {
-    if (!isOpen) return;
-    const initial =
-      payloadBucket ?? currentBucket ?? buckets[0]?.name ?? '';
-    setSelectedBucket(initial);
-    setPrefix(currentPrefix);
+    if (!isOpen) {
+      initializedRef.current = false;
+      return;
+    }
+    if (!initializedRef.current) {
+      initializedRef.current = true;
+      setSelectedBucket(payloadBucket ?? currentBucket ?? buckets[0]?.name ?? '');
+      setPrefix(currentPrefix);
+      return;
+    }
+    // Bucket list arrived after opening with nothing to preselect.
+    setSelectedBucket((prev) => prev || buckets[0]?.name || '');
   }, [isOpen, payloadBucket, currentBucket, currentPrefix, buckets]);
 
   const onKindChange = (next: FakeDataKind) => {
@@ -102,7 +118,7 @@ export function FakeDataModal() {
           const { min, max } = parseSizeRange(spec.sizeRange);
           const basePrefix = prefix || preset.prefix;
           for (let n = 1; n <= spec.count; n++) {
-            const name = spec.pattern.replace('{n}', String(n));
+            const name = fileNameFromPattern(spec.pattern, n);
             const file = createFakeFile(spec.kind, n, name, min, max);
             const key = `${basePrefix}${spec.subpath ?? ''}${name}`;
             await provider.uploadObject(selectedBucket, key, file, {
@@ -114,7 +130,7 @@ export function FakeDataModal() {
       } else {
         const { min, max } = parseSizeRange(sizeRange);
         for (let n = 1; n <= count; n++) {
-          const name = pattern.replace('{n}', String(n));
+          const name = fileNameFromPattern(pattern, n);
           const file = createFakeFile(kind, n, name, min, max);
           await provider.uploadObject(selectedBucket, prefix + name, file, {
             contentType: file.type,

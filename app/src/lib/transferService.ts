@@ -53,7 +53,11 @@ export async function transferObjects(
       const contentType =
         uploadOpts?.contentType ?? meta.contentType ?? (blob.type || 'application/octet-stream');
       const file = new File([blob], filename, { type: contentType });
-      await destination.uploadObject(dst.bucket, dst.key, file, { ...uploadOpts, contentType });
+      await destination.uploadObject(dst.bucket, dst.key, file, {
+        ...uploadOpts,
+        contentType,
+        customMetadata: uploadOpts?.customMetadata ?? meta.customMetadata,
+      });
       const outcome: TransferItemOutcome = {
         srcKey: src.key,
         dstKey: dst.key,
