@@ -15,19 +15,20 @@ function q(value: string): string {
   return JSON.stringify(value);
 }
 
+/** POSIX single-quote a value for copy-paste into a shell (keys may contain spaces etc.). */
+export function shellQuote(value: string): string {
+  return /^[A-Za-z0-9_./:=@%+-]+$/.test(value) ? value : `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+/** JSON API URL for one GCS object (object name fully encoded, including slashes). */
+export function gcsObjectUrl(endpoint: string, bucket: string, key: string): string {
+  return `${endpoint}/storage/v1/b/${encodeURIComponent(bucket)}/o/${encodeURIComponent(key)}`;
+}
+
 function gcsEndpoint(profile: ConnectionProfile): string {
   return resolveApiUrl(profile.gcsUrl ?? getDefaultGcsBase());
 }
 
-function gcsEmulatorHost(profile: ConnectionProfile): string {
-  const endpoint = gcsEndpoint(profile);
-  try {
-    const url = new URL(endpoint);
-    return url.port ? `${url.hostname}:${url.port}` : url.hostname;
-  } catch {
-    return 'localhost:4443';
-  }
-}
 
 function s3Endpoint(profile: ConnectionProfile): string {
   return normalizeS3Endpoint(profile.s3Endpoint ?? getDefaultS3Endpoint());
@@ -54,15 +55,16 @@ export function operationSnippet(
 
   if (provider === 'gcs') {
     const endpoint = gcsEndpoint(profile);
-    const host = gcsEmulatorHost(profile);
     if (language === 'cli') {
+      // gsutil ignores STORAGE_EMULATOR_HOST; use the JSON API directly.
       if (operation === 'upload') {
-        return [`export STORAGE_EMULATOR_HOST=${host}`, `gsutil cp ./local-file ${paths.native}`].join('\n');
+        const uploadUrl = `${endpoint}/upload/storage/v1/b/${encodeURIComponent(bucket)}/o?uploadType=media&name=${encodeURIComponent(key)}`;
+        return `curl -X POST --data-binary @./local-file -H 'Content-Type: application/octet-stream' ${shellQuote(uploadUrl)}`;
       }
       if (operation === 'list') {
-        return [`export STORAGE_EMULATOR_HOST=${host}`, `gsutil ls gs://${bucket}/`].join('\n');
+        return `curl ${shellQuote(`${endpoint}/storage/v1/b/${encodeURIComponent(bucket)}/o`)}`;
       }
-      return [`export STORAGE_EMULATOR_HOST=${host}`, `gsutil rm ${paths.native}`].join('\n');
+      return `curl -X DELETE ${shellQuote(gcsObjectUrl(endpoint, bucket, key))}`;
     }
     if (language === 'node') {
       if (operation === 'upload') {
@@ -95,12 +97,12 @@ export function operationSnippet(
     const region = profile.s3Region ?? 'us-east-1';
     if (language === 'cli') {
       if (operation === 'upload') {
-        return `aws --endpoint-url ${endpoint} s3 cp ./local-file ${paths.native}`;
+        return `aws --endpoint-url ${endpoint} s3 cp ./local-file ${shellQuote(paths.native)}`;
       }
       if (operation === 'list') {
-        return `aws --endpoint-url ${endpoint} s3 ls s3://${bucket}/`;
+        return `aws --endpoint-url ${endpoint} s3 ls ${shellQuote(`s3://${bucket}/`)}`;
       }
-      return `aws --endpoint-url ${endpoint} s3 rm ${paths.native}`;
+      return `aws --endpoint-url ${endpoint} s3 rm ${shellQuote(paths.native)}`;
     }
     if (language === 'node') {
       const clientSetup = [
@@ -143,12 +145,12 @@ export function operationSnippet(
     const conn = `DefaultEndpointsProtocol=http;AccountName=${profile.azureAccountName ?? 'devstoreaccount1'};AccountKey=${profile.azureAccountKey ?? AZURITE_ACCOUNT_KEY};BlobEndpoint=${azureBlobServiceUrl(profile)};`;
     if (language === 'cli') {
       if (operation === 'upload') {
-        return `az storage blob upload -f ./local-file -c ${bucket} -n ${key} --connection-string "${conn}"`;
+        return `az storage blob upload -f ./local-file -c ${shellQuote(bucket)} -n ${shellQuote(key)} --connection-string "${conn}"`;
       }
       if (operation === 'list') {
-        return `az storage blob list -c ${bucket} --connection-string "${conn}" --output table`;
+        return `az storage blob list -c ${shellQuote(bucket)} --connection-string "${conn}" --output table`;
       }
-      return `az storage blob delete -c ${bucket} -n ${key} --connection-string "${conn}"`;
+      return `az storage blob delete -c ${shellQuote(bucket)} -n ${shellQuote(key)} --connection-string "${conn}"`;
     }
     if (language === 'node') {
       if (operation === 'upload') {

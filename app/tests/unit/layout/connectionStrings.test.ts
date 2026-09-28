@@ -33,7 +33,7 @@ describe('getProviderConnectionInfo', () => {
     expect(info.title).toBe('GCS EMULATOR');
     expect(info.endpoint).toContain('/api/gcs');
     expect(info.sdkSnippet('node')).toContain('@google-cloud/storage');
-    expect(info.sdkSnippet('cli')).toContain('STORAGE_EMULATOR_HOST');
+    expect(info.sdkSnippet('cli')).toContain('/storage/v1/b');
   });
 
   it('includes endpoint and Node SDK init for S3', () => {

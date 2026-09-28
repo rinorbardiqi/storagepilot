@@ -11,7 +11,7 @@ import {
 import { buildPathFormats, type PathFormats } from './pathFormatters';
 import { resolveApiUrl } from './resolveApiUrl';
 
-import { operationSnippet } from './snippetOperations';
+import { gcsObjectUrl, operationSnippet, shellQuote } from './snippetOperations';
 export type { SnippetLanguage, SnippetOperation } from './snippetTypes';
 import type { SnippetLanguage, SnippetOperation } from './snippetTypes';
 
@@ -37,15 +37,6 @@ function gcsEndpoint(profile: ConnectionProfile): string {
   return resolveApiUrl(profile.gcsUrl ?? getDefaultGcsBase());
 }
 
-function gcsEmulatorHost(profile: ConnectionProfile): string {
-  const endpoint = gcsEndpoint(profile);
-  try {
-    const url = new URL(endpoint);
-    return url.port ? `${url.hostname}:${url.port}` : url.hostname;
-  } catch {
-    return 'localhost:4443';
-  }
-}
 
 function s3Endpoint(profile: ConnectionProfile): string {
   return normalizeS3Endpoint(profile.s3Endpoint ?? getDefaultS3Endpoint());
@@ -78,17 +69,15 @@ function gcsSnippets(
   profile: ConnectionProfile,
   bucket: string,
   key: string,
-  paths: PathFormats,
+  _paths: PathFormats,
 ): string {
   const endpoint = gcsEndpoint(profile);
-  const emulatorHost = gcsEmulatorHost(profile);
 
   switch (language) {
     case 'cli':
-      return [
-        `export STORAGE_EMULATOR_HOST=${emulatorHost}`,
-        `gsutil cp ${paths.native} ./local-file`,
-      ].join('\n');
+      // gsutil ignores STORAGE_EMULATOR_HOST and the emulator may sit behind a path
+      // prefix, so talk to the JSON API directly.
+      return `curl -o ./local-file ${shellQuote(`${gcsObjectUrl(endpoint, bucket, key)}?alt=media`)}`;
     case 'node':
       return [
         '// npm install @google-cloud/storage',
@@ -136,7 +125,7 @@ function gcsSnippets(
         '',
         'func main() {',
         '  ctx := context.Background()',
-        `  client, err := storage.NewClient(ctx, option.WithEndpoint(${q(endpoint)}))`,
+        `  client, err := storage.NewClient(ctx, option.WithEndpoint(${q(`${endpoint}/storage/v1/`)}), option.WithoutAuthentication())`,
         '  if err != nil {',
         '    panic(err)',
         '  }',
@@ -171,7 +160,8 @@ function gcsSnippets(
         '  public static void main(String[] args) throws Exception {',
         '    Storage storage = StorageOptions.newBuilder()',
         `        .setHost(${q(endpoint)})`,
-        "        .setProjectId('test-project')",
+        '        .setProjectId("test-project")',
+        '        .setCredentials(com.google.cloud.NoCredentials.getInstance())',
         '        .build()',
         '        .getService();',
         `    byte[] bytes = storage.readAllBytes(${q(bucket)}, ${q(key)});`,
@@ -196,7 +186,7 @@ function s3Snippets(
 
   switch (language) {
     case 'cli':
-      return `aws --endpoint-url ${endpoint} s3 cp ${paths.native} ./local-file`;
+      return `aws --endpoint-url ${endpoint} s3 cp ${shellQuote(paths.native)} ./local-file`;
     case 'node':
       return [
         '// npm install @aws-sdk/client-s3',
@@ -493,11 +483,10 @@ export function generateConnectionInitSnippet(
 
 function gcsConnectionInit(language: SnippetLanguage, profile: ConnectionProfile): string {
   const endpoint = gcsEndpoint(profile);
-  const emulatorHost = gcsEmulatorHost(profile);
 
   switch (language) {
     case 'cli':
-      return `export STORAGE_EMULATOR_HOST=${emulatorHost}`;
+      return `export GCS_ENDPOINT=${shellQuote(endpoint)}\ncurl "$GCS_ENDPOINT/storage/v1/b"`;
     case 'node':
       return [
         '// npm install @google-cloud/storage',
@@ -525,14 +514,15 @@ function gcsConnectionInit(language: SnippetLanguage, profile: ConnectionProfile
         '  "google.golang.org/api/option"',
         ')',
         '',
-        `client, err := storage.NewClient(ctx, option.WithEndpoint(${q(endpoint)}))`,
+        `client, err := storage.NewClient(ctx, option.WithEndpoint(${q(`${endpoint}/storage/v1/`)}), option.WithoutAuthentication())`,
       ].join('\n');
     case 'java':
       return [
         '// Maven: com.google.cloud:google-cloud-storage',
         'Storage storage = StorageOptions.newBuilder()',
         `    .setHost(${q(endpoint)})`,
-        "    .setProjectId('test-project')",
+        '    .setProjectId("test-project")',
+        '    .setCredentials(com.google.cloud.NoCredentials.getInstance())',
         '    .build()',
         '    .getService();',
       ].join('\n');

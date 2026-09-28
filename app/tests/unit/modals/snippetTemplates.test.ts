@@ -56,7 +56,7 @@ describe('generateSnippet', () => {
     const azure = profiles.find((p) => p.type === 'azure')!;
 
     expect(generateSnippet('cli', 'gcs', gcs, bucket, key, buildPathFormats('gcs', bucket, key, gcs.gcsUrl!))).toContain(
-      'STORAGE_EMULATOR_HOST',
+      '/storage/v1/b/',
     );
     expect(generateSnippet('cli', 's3', s3, bucket, key, buildPathFormats('s3', bucket, key, s3.s3Endpoint!))).toContain(
       '--endpoint-url',
@@ -64,5 +64,19 @@ describe('generateSnippet', () => {
     expect(
       generateSnippet('cli', 'azure', azure, bucket, key, buildPathFormats('azure', bucket, key, azure.azureHost!)),
     ).toContain('az storage blob download');
+  });
+
+  it('quotes CLI arguments that contain spaces', () => {
+    const s3 = profiles.find((p) => p.type === 's3')!;
+    const spaced = 'dir/file name.txt';
+    const code = generateSnippet('cli', 's3', s3, bucket, spaced, buildPathFormats('s3', bucket, spaced, s3.s3Endpoint!), 'delete');
+    expect(code).toContain(`'s3://${bucket}/${spaced}'`);
+  });
+
+  it('GCS Java snippets use string literals and no credentials', () => {
+    const gcs = profiles.find((p) => p.type === 'gcs')!;
+    const code = generateSnippet('java', 'gcs', gcs, bucket, key, buildPathFormats('gcs', bucket, key, gcs.gcsUrl!));
+    expect(code).toContain('.setProjectId("test-project")');
+    expect(code).toContain('NoCredentials');
   });
 });

@@ -121,10 +121,10 @@ export function SnippetModal() {
           Select or configure a connection to generate SDK snippets.
         </p>
       )}
-      {operation !== 'download' && !['node', 'cli'].includes(lang) && (
+      {operation !== 'download' && ['go', 'java'].includes(lang) && (
         <p className="text-[10px] text-[var(--text-muted)] mt-2">
-          Upload, list, and delete snippets are fully templated for Node and CLI. Other languages show
-          download examples — switch to Node or CLI for this operation.
+          Upload, list, and delete snippets are templated for Node, Python, and CLI. Go and Java show
+          the download example — switch language for this operation.
         </p>
       )}
     </Modal>
