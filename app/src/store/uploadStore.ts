@@ -47,6 +47,8 @@ export const useUploadStore = create<UploadState>()((set, get) => ({
       (i) => i.status === 'staged' && (!options?.bucket || i.bucket === options.bucket),
     );
 
+    if (items.length === 0) return { uploaded: 0, failed: 0 };
+
     let uploaded = 0;
     let failed = 0;
 

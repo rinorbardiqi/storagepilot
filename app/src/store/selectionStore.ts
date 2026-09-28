@@ -30,8 +30,11 @@ export const useSelectionStore = create<SelectionState>()((set, get) => ({
   toggle: (key) => (get().selectedKeys.has(key) ? get().deselect(key) : get().select(key)),
 
   selectRange: (fromKey, toKey, allKeys) => {
-    const fromIdx = allKeys.indexOf(fromKey);
     const toIdx = allKeys.indexOf(toKey);
+    if (toIdx === -1) return;
+    // Anchor no longer visible (filtered or paged away) — start the range at the target.
+    const anchorIdx = allKeys.indexOf(fromKey);
+    const fromIdx = anchorIdx === -1 ? toIdx : anchorIdx;
     const [start, end] = fromIdx < toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx];
     set({ selectedKeys: new Set(allKeys.slice(start, end + 1)), lastSelectedKey: toKey });
   },

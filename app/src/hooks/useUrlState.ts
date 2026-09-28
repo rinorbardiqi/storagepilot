@@ -43,9 +43,13 @@ export function useUrlState(hydrated = true) {
     initialSyncDone.current = true;
 
     if (provider) {
-      const profiles = useConnectionStore.getState().profiles;
-      const profile = profiles.find((p) => p.type === provider);
-      if (profile) setActiveProfile(profile.id);
+      const { profiles, activeProfileId } = useConnectionStore.getState();
+      const active = profiles.find((p) => p.id === activeProfileId);
+      // Keep the current connection when it already matches (e.g. a second S3 profile).
+      if (active?.type !== provider) {
+        const profile = profiles.find((p) => p.type === provider);
+        if (profile) setActiveProfile(profile.id);
+      }
     }
 
     // Always set or clear each field so navigation to a shorter URL clears state.

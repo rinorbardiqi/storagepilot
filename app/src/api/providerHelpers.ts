@@ -53,12 +53,20 @@ export async function emptyBucketContents(
   bucket: string,
 ): Promise<number> {
   let deleted = 0;
+  const attempted = new Set<string>();
 
   while (true) {
     const page = await provider.listObjects(bucket, { maxResults: 1000 });
     if (page.objects.length === 0) break;
 
-    for (const obj of page.objects) {
+    // A key that is still listed after we deleted it would otherwise loop forever.
+    const fresh = page.objects.filter((obj) => !attempted.has(obj.key));
+    if (fresh.length === 0) {
+      throw new Error(`Could not empty bucket "${bucket}": objects remain after delete`);
+    }
+
+    for (const obj of fresh) {
+      attempted.add(obj.key);
       await provider.deleteObject(bucket, obj.key);
       deleted++;
     }

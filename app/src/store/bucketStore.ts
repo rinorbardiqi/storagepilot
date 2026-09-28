@@ -17,6 +17,7 @@ interface BucketState {
 // from a previous profile/connection can be discarded.
 let fetchGeneration = 0;
 let fetchInFlight: Promise<void> | null = null;
+let inFlightProfileId: string | null = null;
 let lastFetchedProfileId: string | null = null;
 
 /** Stable refresh helper — safe to use in effect dependency arrays. */
@@ -40,12 +41,9 @@ export const useBucketStore = create<BucketState>()((set, get) => ({
       return;
     }
 
-    if (
-      !options?.force &&
-      activeProfileId &&
-      lastFetchedProfileId === activeProfileId &&
-      fetchInFlight
-    ) {
+    // Reuse an in-flight request only when it is for the same profile and no
+    // fresh list was asked for (a forced refresh must see recent mutations).
+    if (!options?.force && fetchInFlight && inFlightProfileId === activeProfileId) {
       return fetchInFlight;
     }
 
@@ -53,20 +51,20 @@ export const useBucketStore = create<BucketState>()((set, get) => ({
       if (!get().loading) return;
     }
 
-    if (fetchInFlight) return fetchInFlight;
+    const provider = useConnectionStore.getState().getActiveProvider();
+    if (!provider) {
+      set({ buckets: [], loading: false, error: null });
+      return;
+    }
 
-    fetchInFlight = (async () => {
-      const provider = useConnectionStore.getState().getActiveProvider();
-      if (!provider) {
-        set({ buckets: [], loading: false, error: null });
-        return;
-      }
-      const gen = ++fetchGeneration;
+    // Starting a new generation discards whatever older request is still running.
+    const gen = ++fetchGeneration;
+    const run = (async () => {
       set({ loading: true, error: null });
       try {
         const buckets = await provider.listBuckets();
         if (gen !== fetchGeneration) return;
-        lastFetchedProfileId = useConnectionStore.getState().activeProfileId;
+        lastFetchedProfileId = activeProfileId;
         set({ buckets, loading: false });
       } catch (err) {
         if (gen !== fetchGeneration) return;
@@ -77,9 +75,14 @@ export const useBucketStore = create<BucketState>()((set, get) => ({
         });
       }
     })().finally(() => {
-      fetchInFlight = null;
+      if (fetchInFlight === run) {
+        fetchInFlight = null;
+        inFlightProfileId = null;
+      }
     });
 
-    return fetchInFlight;
+    fetchInFlight = run;
+    inFlightProfileId = activeProfileId;
+    return run;
   },
 }));

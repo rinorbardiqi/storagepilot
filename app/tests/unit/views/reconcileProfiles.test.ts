@@ -55,4 +55,11 @@ describe('reconcileProfiles', () => {
     expect(stored.some((p) => p.name === 'Local GCS')).toBe(false);
     expect(stored).toHaveLength(3);
   });
+
+  it('keeps a custom profile that reuses a default name but points elsewhere', () => {
+    const stored = reconcileProfiles([
+      { id: 'custom-1', name: 'GCS Emulator', type: 'gcs', gcsUrl: 'http://10.0.0.5:4443' },
+    ]);
+    expect(stored.some((p) => p.id === 'custom-1')).toBe(true);
+  });
 });

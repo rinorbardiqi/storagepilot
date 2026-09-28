@@ -16,22 +16,30 @@ export function useKeyboard() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement).tagName;
-      if (['INPUT', 'TEXTAREA'].includes(tag) && e.key !== 'Escape') return;
+      const target = e.target as HTMLElement;
+      const tag = target.tagName;
+      const editable =
+        ['INPUT', 'TEXTAREA', 'SELECT'].includes(tag) || target.isContentEditable;
+      if (editable && e.key !== 'Escape') return;
 
       if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         openModal('commandPalette');
+        return;
       }
-      if (e.key === 'u') openModal('upload');
-      if (e.key === 'n') openModal('newBucket');
-      if (e.key === '?') openModal('shortcuts');
       if (e.key === 'Escape') {
         closeAll();
         closeDetail();
         clearSelection();
+        return;
       }
-      if (e.key === 'Backspace' && tag !== 'INPUT' && canGoBack) {
+      // Single-key shortcuts must not hijack browser/OS combos like Cmd+T or Ctrl+U.
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      if (e.key === 'u') openModal('upload');
+      if (e.key === 'n') openModal('newBucket');
+      if (e.key === '?') openModal('shortcuts');
+      if (e.key === 'Backspace' && canGoBack) {
         e.preventDefault();
         goBack();
       }

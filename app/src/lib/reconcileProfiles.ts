@@ -1,4 +1,5 @@
 import type { ConnectionProfile } from '../api/providerFactory';
+import { profileEndpoint } from './providerAccent';
 import {
   AZURITE_ACCOUNT_KEY,
   getDefaultAzureBlobServiceUrl,
@@ -75,10 +76,14 @@ export function reconcileProfiles(
     });
 
   const custom = stored.filter((p) => !defaultById.has(p.id));
+  // Drop legacy copies of the defaults, but keep user profiles that merely reuse a
+  // default name (the connection form pre-fills it) while pointing somewhere else.
   const filteredCustom = custom.filter((p) => {
     if (LEGACY_NAMES.has(p.name)) return false;
-    if (defaults.some((d) => d.name === p.name)) return false;
-    return true;
+    const duplicatesDefault = defaults.some(
+      (d) => d.name === p.name && d.type === p.type && profileEndpoint(d) === profileEndpoint(p),
+    );
+    return !duplicatesDefault;
   });
 
   return [...mergedDefaults, ...filteredCustom];

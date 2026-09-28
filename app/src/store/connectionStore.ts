@@ -149,9 +149,10 @@ export const useConnectionStore = create<ConnectionState>()(
           setStatus(id, 'checking');
           try {
             const provider = getCachedProvider(profile);
-            const ok = await provider.testConnection();
-            setStatus(id, ok ? 'connected' : 'disconnected');
-            return ok;
+            // listBuckets (not testConnection, which swallows errors) so diagnostics get the reason.
+            await provider.listBuckets();
+            setStatus(id, 'connected');
+            return true;
           } catch (err) {
             const message = err instanceof Error ? err.message : 'Connection failed';
             setStatus(id, 'disconnected');
@@ -179,9 +180,9 @@ export const useConnectionStore = create<ConnectionState>()(
       }),
       merge: (persisted, current) => {
         const p = persisted as Partial<typeof current> | undefined;
-        if (!p?.profiles?.length) return current;
+        if (!p) return current;
         const deletedDefaultIds = p.deletedDefaultIds ?? [];
-        const profiles = reconcileProfiles(p.profiles, deletedDefaultIds);
+        const profiles = reconcileProfiles(p.profiles ?? [], deletedDefaultIds);
         const activeProfileId =
           p.activeProfileId && profiles.some((pr) => pr.id === p.activeProfileId)
             ? p.activeProfileId

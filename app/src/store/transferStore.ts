@@ -38,7 +38,9 @@ function deriveJobStatus(items: TransferItemResult[]): TransferStatus {
   const done = items.filter((i) => i.status === 'done').length;
   const failed = items.filter((i) => i.status === 'error').length;
   const running = items.some((i) => i.status === 'running');
-  if (running) return 'running';
+  const pending = items.some((i) => i.status === 'pending');
+  // Between items (some finished, some still pending) the job is still running.
+  if (running || (pending && done + failed > 0)) return 'running';
   if (failed === 0 && done === items.length) return 'done';
   if (failed > 0 && done > 0) return 'partial';
   if (failed > 0) return 'error';

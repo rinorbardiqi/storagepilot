@@ -22,22 +22,26 @@ export function useObjects() {
   const [data, setData] = useState<ListResult>(EMPTY);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pageIndex, setPageIndex] = useState(0);
-  const [pageTokens, setPageTokens] = useState<(string | undefined)[]>([undefined]);
+  // Pagination belongs to one location; a token from another bucket/prefix is invalid.
+  const location = `${activeProfileId ?? ''}|${currentBucket ?? ''}|${currentPrefix}`;
+  const [paging, setPaging] = useState<{
+    location: string;
+    index: number;
+    tokens: (string | undefined)[];
+  }>({ location, index: 0, tokens: [undefined] });
+  const current =
+    paging.location === location ? paging : { location, index: 0, tokens: [undefined] };
+  if (current !== paging) setPaging(current);
+  const pageIndex = current.index;
 
   // Tracks the current request so stale responses are discarded.
   const requestIdRef = useRef(0);
 
-  const pageToken = pageTokens[pageIndex];
+  const pageToken = current.tokens[pageIndex];
   const page = pageIndex + 1;
   const hasNextPage = Boolean(data.nextPageToken);
   const hasPreviousPage = pageIndex > 0;
   const itemCount = data.objects.length + data.prefixes.length;
-
-  useEffect(() => {
-    setPageIndex(0);
-    setPageTokens([undefined]);
-  }, [currentBucket, currentPrefix, activeProfileId]);
 
   const refresh = useCallback(async () => {
     const provider = getActiveProvider();
@@ -91,18 +95,18 @@ export function useObjects() {
     void refresh();
   }, [refresh, objectsRevision]);
 
+  const nextPageToken = data.nextPageToken;
   const goToNextPage = useCallback(() => {
-    if (!data.nextPageToken) return;
-    setPageTokens((tokens) => {
-      const nextIndex = pageIndex + 1;
-      if (nextIndex < tokens.length) return tokens;
-      return [...tokens, data.nextPageToken];
+    if (!nextPageToken) return;
+    setPaging((p) => {
+      const nextIndex = p.index + 1;
+      const tokens = [...p.tokens.slice(0, nextIndex), nextPageToken];
+      return { ...p, index: nextIndex, tokens };
     });
-    setPageIndex((index) => index + 1);
-  }, [data.nextPageToken, pageIndex]);
+  }, [nextPageToken]);
 
   const goToPreviousPage = useCallback(() => {
-    setPageIndex((index) => Math.max(0, index - 1));
+    setPaging((p) => ({ ...p, index: Math.max(0, p.index - 1) }));
   }, []);
 
   const isEmpty =
