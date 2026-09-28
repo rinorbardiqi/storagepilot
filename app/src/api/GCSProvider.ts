@@ -16,7 +16,7 @@ import type {
   PathFormats,
   UploadOpts,
 } from './types';
-import { fetchWithError, notImplemented, StorageError } from './types';
+import { fetchWithError, StorageError } from './types';
 
 export interface GCSConfig {
   type: 'gcs';
@@ -71,6 +71,8 @@ export class GCSProvider implements StorageProvider {
 
   async createBucket(name: string, _opts?: CreateBucketOpts): Promise<Bucket> {
     const bucket = prepareBucketName(name, 'gcs');
+    // Versioning is applied separately (setBucketVersioning): fake-gcs's filesystem
+    // backend rejects it, and that must not stop the bucket from being created.
     await fetchWithError(`${this.baseUrl}/storage/v1/b`, this.type, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -129,8 +131,12 @@ export class GCSProvider implements StorageProvider {
     }));
   }
 
-  async setBucketVersioning(_bucket: string, _enabled: boolean): Promise<void> {
-    return notImplemented('gcs', 'setBucketVersioning');
+  async setBucketVersioning(bucket: string, enabled: boolean): Promise<void> {
+    await fetchWithError(`${this.baseUrl}/storage/v1/b/${encodeURIComponent(bucket)}`, this.type, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ versioning: { enabled } }),
+    });
   }
 
   async listObjects(bucket: string, opts: ListOpts = {}): Promise<ListResult> {
@@ -241,13 +247,17 @@ export class GCSProvider implements StorageProvider {
     key: string,
     metadata: Record<string, string>,
   ): Promise<void> {
+    // Full update (PUT) replaces the metadata map, so removed keys really go away
+    // (PATCH merges, and fake-gcs turns null into ""). Send the current resource
+    // back so other writable fields such as contentType are kept.
+    const current = await this.fetchObjectResource(bucket, key);
     await fetchWithError(
       `${this.baseUrl}/storage/v1/b/${encodeURIComponent(bucket)}/o/${encodeURIComponent(key)}`,
       this.type,
       {
-        method: 'PATCH',
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ metadata }),
+        body: JSON.stringify({ ...current, metadata }),
       },
     );
   }

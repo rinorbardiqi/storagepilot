@@ -57,7 +57,7 @@ export function NewBucketModal() {
     setLoading(false);
   }, [isOpen, providerType]);
 
-  const sanitized = useMemo(() => sanitizeBucketName(name), [name]);
+  const sanitized = useMemo(() => sanitizeBucketName(name, providerType), [name, providerType]);
   const validationError = useMemo(
     () => (sanitized ? validateBucketName(sanitized, providerType) : null),
     [sanitized, providerType],
@@ -75,6 +75,16 @@ export function NewBucketModal() {
     try {
       await provider.createBucket(sanitized, { enableVersioning: versioning, location });
       toast.success(`${resourceLabel.replace(' Name', '')} "${sanitized}" created`);
+      if (versioning) {
+        // Separate step: some emulators (fake-gcs filesystem, Azurite) can't version,
+        // and that shouldn't undo the bucket that was just created.
+        try {
+          await provider.setBucketVersioning(sanitized, true);
+        } catch (versionErr) {
+          const reason = versionErr instanceof Error ? `: ${versionErr.message}` : '';
+          toast.warning(`Versioning was not enabled${reason}`);
+        }
+      }
       await refresh();
       closeModal('newBucket');
     } catch (err) {

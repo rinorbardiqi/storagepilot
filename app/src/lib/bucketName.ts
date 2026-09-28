@@ -1,12 +1,13 @@
 import type { ProviderType } from '../api/types';
 
-/** Strip URI schemes and normalize to lowercase. */
-export function sanitizeBucketName(raw: string): string {
+/** Strip URI schemes and normalize to lowercase. GCS keeps underscores; S3/Azure do not allow them. */
+export function sanitizeBucketName(raw: string, provider?: ProviderType): string {
+  const disallowed = provider === 'gcs' ? /[^a-z0-9._-]/g : /[^a-z0-9.-]/g;
   return raw
     .trim()
     .toLowerCase()
     .replace(/^(gs|s3|azure|az|https?):\/\//, '')
-    .replace(/[^a-z0-9.-]/g, '-')
+    .replace(disallowed, '-')
     .replace(/-+/g, '-')
     .replace(/^-+|-+$/g, '');
 }
@@ -63,7 +64,7 @@ export function validateBucketName(name: string, provider: ProviderType): string
 
 /** Sanitize then validate; throws with a clear message if still invalid. */
 export function prepareBucketName(raw: string, provider: ProviderType): string {
-  const name = sanitizeBucketName(raw);
+  const name = sanitizeBucketName(raw, provider);
   const err = validateBucketName(name, provider);
   if (err) throw new Error(err);
   return name;
