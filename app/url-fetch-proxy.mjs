@@ -2,9 +2,10 @@
 /**
  * Same-origin proxy for Upload → From URL in bundled Docker images.
  * Nginx forwards /api/fetch to 127.0.0.1:8099 (see docker-nginx-render.sh).
- * Dev server uses the equivalent middleware in vite.config.ts.
+ * Dev server uses the same fetch logic via vite.config.ts.
  */
 import http from 'node:http';
+import { fetchRemoteUrl, UrlFetchError } from './url-fetch-guard.mjs';
 
 const HOST = process.env.URL_FETCH_PROXY_HOST ?? '127.0.0.1';
 const PORT = Number(process.env.URL_FETCH_PROXY_PORT ?? 8099);
@@ -24,43 +25,20 @@ const server = http.createServer((req, res) => {
   }
 
   void (async () => {
+    const target = requestUrl.searchParams.get('url');
+    if (!target) {
+      res.statusCode = 400;
+      res.end('Missing url parameter');
+      return;
+    }
     try {
-      const target = requestUrl.searchParams.get('url');
-      if (!target) {
-        res.statusCode = 400;
-        res.end('Missing url parameter');
-        return;
-      }
-
-      let parsed;
-      try {
-        parsed = new URL(target);
-      } catch {
-        res.statusCode = 400;
-        res.end('Invalid url parameter');
-        return;
-      }
-
-      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-        res.statusCode = 400;
-        res.end('Only http(s) URLs are supported');
-        return;
-      }
-
-      const upstream = await fetch(target, { redirect: 'follow' });
-      if (!upstream.ok) {
-        res.statusCode = upstream.status;
-        res.end(`Upstream HTTP ${upstream.status}`);
-        return;
-      }
-
-      const body = Buffer.from(await upstream.arrayBuffer());
+      const { contentType, body } = await fetchRemoteUrl(target);
       res.statusCode = 200;
-      res.setHeader('Content-Type', upstream.headers.get('content-type') || 'application/octet-stream');
+      res.setHeader('Content-Type', contentType);
       res.setHeader('Content-Length', String(body.length));
       res.end(body);
     } catch (err) {
-      res.statusCode = 502;
+      res.statusCode = err instanceof UrlFetchError ? err.status : 502;
       res.end(err instanceof Error ? err.message : 'Fetch failed');
     }
   })();

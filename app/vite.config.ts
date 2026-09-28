@@ -5,6 +5,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import { fetchRemoteUrl, UrlFetchError } from './url-fetch-guard.mjs';
 
 const appVersion = JSON.parse(
   readFileSync(new URL('./package.json', import.meta.url), 'utf-8'),
@@ -31,42 +32,19 @@ function urlFetchProxyPlugin(): Plugin {
           return;
         }
         void (async () => {
+          const target = new URL(req.url ?? '/', 'http://127.0.0.1').searchParams.get('url');
+          if (!target) {
+            res.statusCode = 400;
+            res.end('Missing url parameter');
+            return;
+          }
           try {
-            const requestUrl = new URL(req.url ?? '/', 'http://127.0.0.1');
-            const target = requestUrl.searchParams.get('url');
-            if (!target) {
-              res.statusCode = 400;
-              res.end('Missing url parameter');
-              return;
-            }
-            let parsed: URL;
-            try {
-              parsed = new URL(target);
-            } catch {
-              res.statusCode = 400;
-              res.end('Invalid url parameter');
-              return;
-            }
-            if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-              res.statusCode = 400;
-              res.end('Only http(s) URLs are supported');
-              return;
-            }
-            const upstream = await fetch(target, { redirect: 'follow' });
-            if (!upstream.ok) {
-              res.statusCode = upstream.status;
-              res.end(`Upstream HTTP ${upstream.status}`);
-              return;
-            }
+            const { contentType, body } = await fetchRemoteUrl(target);
             res.statusCode = 200;
-            res.setHeader(
-              'Content-Type',
-              upstream.headers.get('content-type') || 'application/octet-stream',
-            );
-            const body = Buffer.from(await upstream.arrayBuffer());
+            res.setHeader('Content-Type', contentType);
             res.end(body);
           } catch (err) {
-            res.statusCode = 502;
+            res.statusCode = err instanceof UrlFetchError ? err.status : 502;
             res.end(err instanceof Error ? err.message : 'Fetch failed');
           }
         })();
