@@ -57,8 +57,28 @@ export class AzureProvider implements StorageProvider {
 
   /** Direct blob URL for x-ms-copy-source (Azurite must fetch without nginx/proxy auth). */
   private copySourceUrl(container: string, key: string, versionId?: string): string {
-    const base = `${getAzureDirectServiceUrl(this.accountName)}/${container}/${encodeObjectKey(key)}`;
-    return versionId ? `${base}?versionId=${encodeURIComponent(versionId)}` : base;
+    // Only proxied endpoints need rewriting; a real account URL is already direct.
+    const service = this.baseUrl.includes('/api/azure')
+      ? getAzureDirectServiceUrl(this.accountName)
+      : this.baseUrl;
+    const base = `${service}/${container}/${encodeObjectKey(key)}`;
+    return versionId ? `${base}?versionid=${encodeURIComponent(versionId)}` : base;
+  }
+
+  /** Copy Blob may complete asynchronously — wait so callers (e.g. move) never delete the source early. */
+  private async waitForCopy(container: string, key: string, res: Response): Promise<void> {
+    let status = res.headers.get('x-ms-copy-status');
+    for (let attempt = 0; status === 'pending' && attempt < 120; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const head = await this.request(this.objectUrl(container, key), { method: 'HEAD' });
+      status = head.headers.get('x-ms-copy-status');
+    }
+    if (status === 'pending') {
+      throw new StorageError('UNKNOWN', 'Copy did not finish in time', 'azure');
+    }
+    if (status && status !== 'success') {
+      throw new StorageError('UNKNOWN', `Copy ${status}`, 'azure');
+    }
   }
 
   private parseBlobVersions(doc: Document, key: string): ObjectVersion[] {
@@ -127,12 +147,19 @@ export class AzureProvider implements StorageProvider {
     const res = await this.request(url);
     const text = await res.text();
     const doc = new DOMParser().parseFromString(text, 'text/xml');
-    return [...doc.getElementsByTagName('Name')]
-      .filter((el) => el.textContent !== null)
-      .map((el) => ({
-        name: el.textContent as string,
-        provider: 'azure' as const,
-      }));
+    return [...doc.getElementsByTagName('Container')]
+      .map((container) => {
+        const name = container.getElementsByTagName('Name')[0]?.textContent ?? '';
+        const lastModified = container
+          .getElementsByTagName('Properties')[0]
+          ?.getElementsByTagName('Last-Modified')[0]?.textContent;
+        return {
+          name,
+          createdAt: lastModified ? new Date(lastModified) : undefined,
+          provider: 'azure' as const,
+        };
+      })
+      .filter((b) => b.name);
   }
 
   async createBucket(name: string, _opts?: CreateBucketOpts): Promise<Bucket> {
@@ -242,6 +269,8 @@ export class AzureProvider implements StorageProvider {
       // Azurite/nginx hang on large Put Blob when Content-Type is video/* — send octet-stream.
       'Content-Type': 'application/octet-stream',
       'x-ms-blob-type': 'BlockBlob',
+      // Stored blob type — independent of the request Content-Type above.
+      'x-ms-blob-content-type': opts?.contentType || file.type || 'application/octet-stream',
     };
     if (opts?.customMetadata) {
       for (const [k, v] of Object.entries(opts.customMetadata)) {
@@ -264,10 +293,11 @@ export class AzureProvider implements StorageProvider {
   async copyObject(src: ObjectRef, dst: ObjectRef): Promise<void> {
     const sourceUrl = this.copySourceUrl(src.bucket, src.key);
     const url = this.objectUrl(dst.bucket, dst.key);
-    await this.request(url, {
+    const res = await this.request(url, {
       method: 'PUT',
       headers: { 'x-ms-copy-source': sourceUrl },
     });
+    await this.waitForCopy(dst.bucket, dst.key, res);
   }
 
   async moveObject(src: ObjectRef, dst: ObjectRef): Promise<void> {
@@ -275,11 +305,19 @@ export class AzureProvider implements StorageProvider {
   }
 
   async updateMetadata(
-    _container: string,
-    _key: string,
-    _metadata: Record<string, string>,
+    container: string,
+    key: string,
+    metadata: Record<string, string>,
   ): Promise<void> {
-    return notImplemented('azure', 'updateMetadata');
+    // Set Blob Metadata replaces the whole set, so removed keys are dropped too.
+    const headers: Record<string, string> = {};
+    for (const [k, v] of Object.entries(metadata)) {
+      headers[`x-ms-meta-${k}`] = v;
+    }
+    await this.request(appendAzureQuery(this.objectUrl(container, key), { comp: 'metadata' }), {
+      method: 'PUT',
+      headers,
+    });
   }
 
   async listVersions(container: string, key: string): Promise<ObjectVersion[]> {
@@ -332,18 +370,18 @@ export class AzureProvider implements StorageProvider {
 
   async restoreVersion(container: string, key: string, versionId: string): Promise<void> {
     const url = this.objectUrl(container, key);
-    await this.request(url, {
+    const res = await this.request(url, {
       method: 'PUT',
       headers: { 'x-ms-copy-source': this.copySourceUrl(container, key, versionId) },
     });
+    await this.waitForCopy(container, key, res);
   }
 
   async deleteVersion(container: string, key: string, versionId: string): Promise<void> {
-    const url = this.objectUrl(container, key);
-    await this.request(url, {
-      method: 'DELETE',
-      headers: { 'x-ms-version-id': versionId },
-    });
+    // The version is selected by the `versionid` query parameter; without it Azure
+    // deletes the current blob instead.
+    const url = appendAzureQuery(this.objectUrl(container, key), { versionid: versionId });
+    await this.request(url, { method: 'DELETE' });
   }
 
   getObjectUrl(container: string, key: string): string {
