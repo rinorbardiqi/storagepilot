@@ -42,7 +42,11 @@ export function NewBucketModal() {
   const [name, setName] = useState('');
   const [storageClass, setStorageClass] = useState(defaultsForProvider(providerType).storageClass);
   const [location, setLocation] = useState(defaultsForProvider(providerType).location);
-  const [versioning, setVersioning] = useState(true);
+  // Opt-in: the bundled emulators mostly can't version, so defaulting it on
+  // produced a warning on nearly every bucket created.
+  const [versioning, setVersioning] = useState(false);
+  // Azure versioning is an account-level setting; it cannot be set per container.
+  const versioningAvailable = providerType !== 'azure';
   const [encryption, setEncryption] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -52,7 +56,7 @@ export function NewBucketModal() {
     setName('');
     setStorageClass(defaults.storageClass);
     setLocation(defaults.location);
-    setVersioning(true);
+    setVersioning(false);
     setEncryption(false);
     setLoading(false);
   }, [isOpen, providerType]);
@@ -75,14 +79,18 @@ export function NewBucketModal() {
     try {
       await provider.createBucket(sanitized, { enableVersioning: versioning, location });
       toast.success(`${resourceLabel.replace(' Name', '')} "${sanitized}" created`);
-      if (versioning) {
+      if (versioning && versioningAvailable) {
         // Separate step: some emulators (fake-gcs filesystem, Azurite) can't version,
         // and that shouldn't undo the bucket that was just created.
         try {
           await provider.setBucketVersioning(sanitized, true);
         } catch (versionErr) {
-          const reason = versionErr instanceof Error ? `: ${versionErr.message}` : '';
-          toast.warning(`Versioning was not enabled${reason}`);
+          const reason = versionErr instanceof Error ? versionErr.message : '';
+          toast.warning(
+            /not (yet )?(implemented|supported)|does not support/i.test(reason)
+              ? 'Bucket created without versioning — this storage emulator does not support it.'
+              : `Bucket created, but versioning could not be enabled${reason ? `: ${reason}` : ''}`,
+          );
         }
       }
       await refresh();
@@ -199,10 +207,19 @@ export function NewBucketModal() {
               <History size={18} className="text-[var(--accent)]" />
               <div>
                 <p className="text-sm font-medium">Object Versioning</p>
-                <p className="text-xs text-[var(--text-muted)]">Keep history of object changes</p>
+                <p className="text-xs text-[var(--text-muted)]">
+                  {versioningAvailable
+                    ? 'Keep history of object changes (not supported by every emulator)'
+                    : 'Set on the storage account for Azure, not per container'}
+                </p>
               </div>
             </div>
-            <Toggle checked={versioning} onChange={setVersioning} label="Versioning" />
+            <Toggle
+              checked={versioning && versioningAvailable}
+              onChange={setVersioning}
+              label="Versioning"
+              disabled={!versioningAvailable}
+            />
           </div>
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
