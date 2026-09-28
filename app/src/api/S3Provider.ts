@@ -10,6 +10,7 @@ import {
   ListObjectVersionsCommand,
   ListObjectsV2Command,
   PutBucketCorsCommand,
+  PutBucketVersioningCommand,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
@@ -36,7 +37,7 @@ import type {
   PathFormats,
   UploadOpts,
 } from './types';
-import { notImplemented, StorageError } from './types';
+import { StorageError } from './types';
 
 export interface S3Config {
   type: 's3';
@@ -69,6 +70,15 @@ export class S3Provider implements StorageProvider {
   private wrapError(err: unknown, method: string): never {
     if (err instanceof StorageError) throw err;
     const message = err instanceof Error ? err.message : String(err);
+    const status = (err as { $metadata?: { httpStatusCode?: number } } | null)?.$metadata
+      ?.httpStatusCode;
+    if (status === 404) throw new StorageError('NOT_FOUND', `${method}: ${message}`, 's3', err);
+    if (status === 401 || status === 403) {
+      throw new StorageError('FORBIDDEN', `${method}: ${message}`, 's3', err);
+    }
+    if (status === 409 || status === 412) {
+      throw new StorageError('CONFLICT', `${method}: ${message}`, 's3', err);
+    }
     if (message.includes('ECONNREFUSED') || message.includes('fetch failed')) {
       throw new StorageError('CONNECTION_FAILED', message, 's3', err);
     }
@@ -106,18 +116,43 @@ export class S3Provider implements StorageProvider {
     const bucket = prepareBucketName(name, 's3');
     try {
       await this.client.send(new CreateBucketCommand({ Bucket: bucket }));
-      return { name: bucket, provider: 's3' };
     } catch (err) {
       this.wrapError(err, 'createBucket');
     }
+    return { name: bucket, provider: 's3' };
   }
 
   async deleteBucket(name: string): Promise<void> {
     try {
+      // A versioned bucket still holds old versions and delete markers after its
+      // objects are deleted, and S3 refuses to delete it until those are gone too.
+      await this.purgeVersions(name);
       await this.client.send(new DeleteBucketCommand({ Bucket: name }));
     } catch (err) {
       this.wrapError(err, 'deleteBucket');
     }
+  }
+
+  private async purgeVersions(bucket: string): Promise<void> {
+    let keyMarker: string | undefined;
+    let versionIdMarker: string | undefined;
+    do {
+      const page = await this.client.send(
+        new ListObjectVersionsCommand({
+          Bucket: bucket,
+          KeyMarker: keyMarker,
+          VersionIdMarker: versionIdMarker,
+        }),
+      );
+      for (const entry of [...(page.Versions ?? []), ...(page.DeleteMarkers ?? [])]) {
+        if (!entry.Key) continue;
+        await this.client.send(
+          new DeleteObjectCommand({ Bucket: bucket, Key: entry.Key, VersionId: entry.VersionId }),
+        );
+      }
+      keyMarker = page.IsTruncated ? page.NextKeyMarker : undefined;
+      versionIdMarker = page.IsTruncated ? page.NextVersionIdMarker : undefined;
+    } while (keyMarker);
   }
 
   async getBucketStats(name: string): Promise<BucketStats> {
@@ -164,8 +199,17 @@ export class S3Provider implements StorageProvider {
     }
   }
 
-  async setBucketVersioning(_bucket: string, _enabled: boolean): Promise<void> {
-    return notImplemented('s3', 'setBucketVersioning');
+  async setBucketVersioning(bucket: string, enabled: boolean): Promise<void> {
+    try {
+      await this.client.send(
+        new PutBucketVersioningCommand({
+          Bucket: bucket,
+          VersioningConfiguration: { Status: enabled ? 'Enabled' : 'Suspended' },
+        }),
+      );
+    } catch (err) {
+      this.wrapError(err, 'setBucketVersioning');
+    }
   }
 
   async listObjects(bucket: string, opts: ListOpts = {}): Promise<ListResult> {
@@ -290,9 +334,22 @@ export class S3Provider implements StorageProvider {
     key: string,
     metadata: Record<string, string>,
   ): Promise<void> {
-    const blob = await this.getObject(bucket, key);
-    const file = new File([blob], key.split('/').pop() ?? key);
-    await this.uploadObject(bucket, key, file, { customMetadata: metadata });
+    // Copy onto itself with REPLACE: rewrites metadata server-side and keeps the content type.
+    const current = await this.getObjectMetadata(bucket, key);
+    try {
+      await this.client.send(
+        new CopyObjectCommand({
+          Bucket: bucket,
+          Key: key,
+          CopySource: s3CopySource(bucket, key),
+          MetadataDirective: 'REPLACE',
+          ContentType: current.contentType,
+          Metadata: metadata,
+        }),
+      );
+    } catch (err) {
+      this.wrapError(err, 'updateMetadata');
+    }
   }
 
   async listVersions(bucket: string, key: string): Promise<ObjectVersion[]> {
