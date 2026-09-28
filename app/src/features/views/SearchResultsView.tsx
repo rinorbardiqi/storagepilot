@@ -39,10 +39,11 @@ export function SearchResultsView() {
   } = useObjects();
   const { downloadOne, deleteOne, deleteSelected } = useObjectActions(refresh);
 
+  // Record only settled queries, not every keystroke ("p", "ph", "pho"…).
   useEffect(() => {
-    if (searchQuery.trim() && currentBucket) {
-      addRecentSearch(searchQuery, currentBucket);
-    }
+    if (!searchQuery.trim() || !currentBucket) return;
+    const timer = setTimeout(() => addRecentSearch(searchQuery, currentBucket), 1000);
+    return () => clearTimeout(timer);
   }, [searchQuery, currentBucket, addRecentSearch]);
 
   const onNextPage = useCallback(() => {

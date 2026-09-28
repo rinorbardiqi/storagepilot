@@ -73,6 +73,9 @@ export function Sidebar() {
   const toast = useToast();
 
   const visibleProfiles = profiles.filter((p) => enabledProviders.includes(p.type));
+  // The recent list is shared across connections; only offer buckets that exist here.
+  const bucketNames = new Set(buckets.map((b) => b.name));
+  const recentBuckets = recentlyVisited.filter((name) => bucketNames.has(name));
   const activeProfile = profiles.find((p) => p.id === activeProfileId);
 
   const explorerMode = appSection === 'explorer';
@@ -281,10 +284,10 @@ export function Sidebar() {
                 </button>
               );
             })}
-            {view === 'bucket-list' && recentlyVisited.length > 0 && (
+            {view === 'bucket-list' && recentBuckets.length > 0 && (
               <>
                 <SectionLabel className="px-2 py-1.5 mt-4">Recently Visited</SectionLabel>
-                {recentlyVisited.map((name) => (
+                {recentBuckets.map((name) => (
                   <button
                     key={name}
                     type="button"

@@ -40,7 +40,10 @@ export function DropZone({ children }: DropZoneProps) {
         if (currentBucket) setDragging(true);
       }}
       onDragOver={(e) => e.preventDefault()}
-      onDragLeave={() => setDragging(false)}
+      onDragLeave={(e) => {
+        // dragleave also fires when moving over child elements; only reset on real exit.
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
+      }}
       onDrop={(e) => {
         e.preventDefault();
         setDragging(false);

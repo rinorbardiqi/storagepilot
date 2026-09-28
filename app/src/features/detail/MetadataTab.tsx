@@ -31,6 +31,9 @@ export function MetadataTab({ object, bucket }: { object: StorageObject; bucket:
 
   useEffect(() => {
     const p = getActiveProvider();
+    // Clear the previous object's details so they never show under this one.
+    setMetadata(null);
+    setImageSize(null);
     if (!p) return;
     let cancelled = false;
     void p
@@ -48,9 +51,15 @@ export function MetadataTab({ object, bucket }: { object: StorageObject; bucket:
 
   useEffect(() => {
     if (previewKind !== 'image' || !url) return;
+    let cancelled = false;
     const img = new Image();
-    img.onload = () => setImageSize(`${img.naturalWidth} × ${img.naturalHeight} px`);
+    img.onload = () => {
+      if (!cancelled) setImageSize(`${img.naturalWidth} × ${img.naturalHeight} px`);
+    };
     img.src = url;
+    return () => {
+      cancelled = true;
+    };
   }, [previewKind, url]);
 
   const rows: Array<[string, string]> = [

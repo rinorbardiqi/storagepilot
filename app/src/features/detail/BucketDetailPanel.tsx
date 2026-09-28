@@ -63,8 +63,10 @@ export function BucketDetailPanel() {
   const showDetails = bucketDetailPanelOpen && selectedBucketInList && bucket;
 
   useEffect(() => {
+    // Never show the previous bucket's numbers while this one loads.
+    setStats(null);
     if (!selectedBucketInList || !bucketDetailPanelOpen) {
-      setStats(null);
+      setLoadingStats(false);
       return;
     }
     const provider = getActiveProvider();

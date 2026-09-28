@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ObjectVersion } from '../../api/types';
 import { useConnectionStore } from '../../store/connectionStore';
 import { useModalStore } from '../../store/modalStore';
@@ -18,25 +18,31 @@ export function VersionsTab({ bucket, objectKey }: { bucket: string; objectKey: 
 
   const versionLabel = providerType === 'gcs' ? 'Generation' : 'Version ID';
 
-  const refresh = async () => {
+  // Drops responses for an object the user has already navigated away from.
+  const requestIdRef = useRef(0);
+
+  const refresh = useCallback(async () => {
     const provider = getActiveProvider();
     if (!provider) return;
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     setError(null);
     try {
       const list = await provider.listVersions(bucket, objectKey);
+      if (requestId !== requestIdRef.current) return;
       setVersions(list);
     } catch (err) {
+      if (requestId !== requestIdRef.current) return;
       setError(err instanceof Error ? err.message : 'Failed to load versions');
       setVersions([]);
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
-  };
+  }, [bucket, objectKey, getActiveProvider]);
 
   useEffect(() => {
     void refresh();
-  }, [bucket, objectKey, getActiveProvider]);
+  }, [refresh]);
 
   const restore = async (versionId: string) => {
     const provider = getActiveProvider();

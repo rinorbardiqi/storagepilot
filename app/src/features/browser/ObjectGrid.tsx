@@ -15,6 +15,8 @@ interface ObjectGridProps {
   onNavigatePrefix: (prefix: string) => void;
 }
 
+const MAX_THUMBNAIL_BYTES = 5 * 1024 * 1024;
+
 function GridThumbnail({ object, bucket }: { object: StorageObject; bucket: string }) {
   const getActiveProvider = useConnectionStore((s) => s.getActiveProvider);
   const activeProfileId = useConnectionStore((s) => s.activeProfileId);
@@ -22,7 +24,10 @@ function GridThumbnail({ object, bucket }: { object: StorageObject; bucket: stri
   const [thumbUrl, setThumbUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    if (previewKind !== 'image') return;
+    setThumbUrl(null);
+    // Thumbnails download the whole object; skip big files so a page of photos
+    // doesn't pull hundreds of MB just for 48px previews.
+    if (previewKind !== 'image' || object.size > MAX_THUMBNAIL_BYTES) return;
     const provider = getActiveProvider();
     if (!provider) return;
 
@@ -44,7 +49,7 @@ function GridThumbnail({ object, bucket }: { object: StorageObject; bucket: stri
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [bucket, object.key, object.contentType, previewKind, getActiveProvider, activeProfileId]);
+  }, [bucket, object.key, object.contentType, object.size, previewKind, getActiveProvider, activeProfileId]);
 
   if (thumbUrl) {
     return (

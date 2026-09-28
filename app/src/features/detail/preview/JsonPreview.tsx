@@ -14,6 +14,8 @@ export function JsonPreview({ blob, compact, fullscreen }: JsonPreviewProps) {
   useEffect(() => {
     let cancelled = false;
     const maxChars = compact ? 20_000 : fullscreen ? 500_000 : 20_000;
+    setHtml(null);
+    setParseError(null);
 
     void blob.text().then(async (raw) => {
       try {

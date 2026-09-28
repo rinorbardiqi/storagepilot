@@ -12,10 +12,12 @@ const FULLSCREEN_BYTES_LIMIT = 65536;
 export function HexPreview({ blob, compact, fullscreen }: HexPreviewProps) {
   const [rows, setRows] = useState<Array<{ offset: string; hex: string; ascii: string }>>([]);
   const [bytesShown, setBytesShown] = useState(0);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     const limit = fullscreen ? FULLSCREEN_BYTES_LIMIT : BYTES_LIMIT;
+    setLoaded(false);
 
     void blob.slice(0, limit).arrayBuffer().then((buf) => {
       if (cancelled) return;
@@ -37,13 +39,15 @@ export function HexPreview({ blob, compact, fullscreen }: HexPreviewProps) {
         });
       }
       setRows(result);
+      setLoaded(true);
     });
     return () => {
       cancelled = true;
     };
   }, [blob, compact, fullscreen]);
 
-  if (!rows.length) return <p className="text-sm text-[var(--text-muted)]">Loading preview…</p>;
+  if (!loaded) return <p className="text-sm text-[var(--text-muted)]">Loading preview…</p>;
+  if (!rows.length) return <p className="text-sm text-[var(--text-muted)]">Empty file (0 bytes).</p>;
 
   return (
     <div

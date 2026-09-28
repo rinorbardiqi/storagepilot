@@ -11,25 +11,40 @@ export function CsvPreview({ blob, compact, fullscreen }: CsvPreviewProps) {
   const [headers, setHeaders] = useState<string[]>([]);
   const [rows, setRows] = useState<string[][]>([]);
   const [truncated, setTruncated] = useState(false);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'empty' | 'error'>('loading');
 
   useEffect(() => {
     let cancelled = false;
-    void blob.text().then((text) => {
-      const parsed = Papa.parse<string[]>(text, { skipEmptyLines: true });
-      if (cancelled || parsed.errors.length) return;
-      const data = parsed.data;
-      if (!data.length) return;
-      const maxRows = compact ? 10 : fullscreen ? 500 : 50;
-      setHeaders(data[0] ?? []);
-      setRows(data.slice(1, maxRows + 1));
-      setTruncated(data.length - 1 > maxRows);
-    });
+    setStatus('loading');
+    void blob
+      .text()
+      .then((text) => {
+        if (cancelled) return;
+        // Papa reports recoverable issues (e.g. ragged rows) as errors but still
+        // returns the rows, so render whatever parsed instead of hanging.
+        const parsed = Papa.parse<string[]>(text, { skipEmptyLines: true });
+        const data = parsed.data;
+        if (!data.length) {
+          setStatus('empty');
+          return;
+        }
+        const maxRows = compact ? 10 : fullscreen ? 500 : 50;
+        setHeaders(data[0] ?? []);
+        setRows(data.slice(1, maxRows + 1));
+        setTruncated(data.length - 1 > maxRows);
+        setStatus('ready');
+      })
+      .catch(() => {
+        if (!cancelled) setStatus('error');
+      });
     return () => {
       cancelled = true;
     };
   }, [blob, compact, fullscreen]);
 
-  if (!headers.length) return <p className="text-sm text-[var(--text-muted)]">Loading preview…</p>;
+  if (status === 'loading') return <p className="text-sm text-[var(--text-muted)]">Loading preview…</p>;
+  if (status === 'empty') return <p className="text-sm text-[var(--text-muted)]">Empty CSV file.</p>;
+  if (status === 'error') return <p className="text-sm text-[var(--error)]">Could not read CSV file.</p>;
 
   return (
     <div
@@ -40,8 +55,8 @@ export function CsvPreview({ blob, compact, fullscreen }: CsvPreviewProps) {
       <table className="w-full text-xs">
         <thead className="sticky top-0 bg-[var(--bg-elevated)]">
           <tr>
-            {headers.map((h) => (
-              <th key={h} className="p-2 text-left font-mono border-b border-[var(--border)] whitespace-nowrap">
+            {headers.map((h, i) => (
+              <th key={i} className="p-2 text-left font-mono border-b border-[var(--border)] whitespace-nowrap">
                 {h}
               </th>
             ))}

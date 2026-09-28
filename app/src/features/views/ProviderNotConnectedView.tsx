@@ -76,12 +76,13 @@ export function ProviderErrorView() {
   const endpoint = profile ? providerEndpointHint(profile.type) : 'localhost';
   const errorMsg =
     (activeProfileId && connectionErrors[activeProfileId]) ||
-    `request to http://${endpoint}/ failed, reason: connect ECONNREFUSED ${endpoint}`;
+    `Could not reach ${endpoint} (no error details were reported).`;
   const timestamp = new Date().toISOString();
 
   const retry = async () => {
     if (!activeProfileId) return;
-    const ok = await testConnection(activeProfileId);
+    // Force a real check — a stale "connected" status would otherwise short-circuit it.
+    const ok = await testConnection(activeProfileId, { force: true });
     if (ok) setSessionConnectionLost(false);
   };
 
