@@ -93,7 +93,7 @@ function getHighlighter(): Promise<HighlighterCore> {
     highlighterPromise = createHighlighterCore({
       themes: [themeGithubDark],
       langs: [...BUNDLED_LANGS] as LanguageInput[],
-      engine: createOnigurumaEngine(),
+      engine: createOnigurumaEngine(import('shiki/wasm')),
     });
   }
   return highlighterPromise;
